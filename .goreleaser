@@ -1,0 +1,28 @@
+before:
+  hooks:
+    - go mod download
+    - go mod tidy
+builds:
+  - id: vke-cluster-agent
+    goos:
+       - linux
+    goarch:
+      - amd64
+    main: ./cmd/api
+    binary: vke-cluster-agent
+checksum:
+  name_template: 'checksums.txt'
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+archives:
+  - id: vke-cluster-agent-archive
+    name_template: |-
+      vke-cluster-agent_{{.Tag}}_{{.Os}}_{{.Arch}}
+    builds:
+      - vke-cluster-agent
+    files:
+      - locale
+      - README.md
