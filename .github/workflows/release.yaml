@@ -54,20 +54,5 @@ jobs:
 
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.7.0
-        with:
-          chart_path: chart/vke-cluster-agent
-          github_token: ${{ secrets.ACTION_SECRET }}
-          chart_releaser_token: ${{ secrets.ACTION_SECRET }}
-          release_name: ${{ github.event.repository.name }}
-          release_version: ${{ github.sha }}
-          release_message: ${{ github.event.head_commit.message }}
-          release_commit: ${{ github.sha }}
-          release_files: chart/vke-cluster-agent/*.tgz
-          release_files_glob: true
-          release_prerelease: false
-          release_draft: false
-          release_replace: true
-          release_debug: true
-          release_skip_upload: false
-          release_skip_upload_glob: false
-          release_skip_upload_files: ""
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
