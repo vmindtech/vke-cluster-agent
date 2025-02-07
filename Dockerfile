@@ -3,6 +3,7 @@ FROM golang:1.23-bullseye AS build-stage
 WORKDIR /app
 
 COPY . ./
+COPY go.mod go.sum ./
 RUN go mod download
 
 RUN go build -o vke-cluster-agent-application ./cmd/api
