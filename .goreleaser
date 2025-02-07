@@ -5,7 +5,7 @@ before:
 builds:
   - id: vke-cluster-agent
     goos:
-       - linux
+      - linux
     goarch:
       - amd64
     main: ./cmd/api
