@@ -43,7 +43,7 @@ jobs:
       - name: Docker build and push
         run: |
           docker build --platform=linux/amd64 -t vmindtech/vke-cluster-agent:${GITHUB_REF##*/} .
-          docker push vmindtech/vke-cluster-agent:${GITHUB_REF##*/}  
+          docker push vmindtech/vke-cluster-agent:${GITHUB_REF##*/}
 
       - name: Helm Deps
         run: |

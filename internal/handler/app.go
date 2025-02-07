@@ -5,9 +5,9 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/vmindtech/vke-cluster-agent/config"
 	"github.com/vmindtech/vke-cluster-agent/pkg/response"
 
-	"github.com/vmindtech/vke-cluster-agent/config"
 	"github.com/vmindtech/vke-cluster-agent/internal/dto/resource"
 	"github.com/vmindtech/vke-cluster-agent/internal/service"
 	"github.com/vmindtech/vke-cluster-agent/pkg/utils"
