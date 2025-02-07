@@ -32,5 +32,4 @@
 # environment based requirements
 .env
 
-config-*.json
-config*
+config*.json
