@@ -1,5 +1,7 @@
 FROM golang:1.23-bullseye AS build-stage
 
+ENV GOPRIVATE=github.com/vmindtech/*
+
 WORKDIR /app
 
 COPY . ./
