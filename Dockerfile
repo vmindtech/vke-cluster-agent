@@ -3,10 +3,8 @@ FROM golang:1.23-bullseye AS build-stage
 WORKDIR /app
 
 COPY . ./
-COPY go.mod go.sum ./
-RUN go mod download
 
-RUN go build -o vke-cluster-agent-application ./cmd/api
+RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o vke-cluster-agent-application ./cmd/api
 
 FROM gcr.io/distroless/base-debian11 AS build-release-stage
 
