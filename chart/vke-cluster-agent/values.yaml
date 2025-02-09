@@ -50,24 +50,15 @@ securityContext: {}
   # runAsUser: 1000
 
 environments:
-  - name: ENV
-    value: "production"
-  - name: APP_NAME
-    value: "vke-cluster-agent"
-  - name: VERSION
-    value: "0.1.0"
-  - name: PORT
-    value: "80"
-  - name: VKE_CLUSTER_ID
-    value: "1"
-  - name: VKE_PROJECT_ID
-    value: "1"
-  - name: VKE_IDENTITY_URL
-    value: "https://identity.domain.com"
-  - name: VKE_APPLICATION_CREDENTIAL_ID
-    value: "1"
-  - name: VKE_APPLICATION_CREDENTIAL_SECRET
-    value: ""
+  ENV: "production"
+  APP_NAME: "vke-cluster-agent"
+  VERSION: "0.1.0"
+  PORT: 80
+  VKE_CLUSTER_ID: "1"
+  VKE_PROJECT_ID: "1"
+  VKE_IDENTITY_URL: "https://identity.domain.com"
+  VKE_APPLICATION_CREDENTIAL_ID: 1
+  VKE_APPLICATION_CREDENTIAL_SECRET: ""
 
 
 resources: 
