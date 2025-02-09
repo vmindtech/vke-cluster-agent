@@ -10,6 +10,7 @@ builds:
       - amd64
     main: ./cmd/api
     binary: vke-cluster-agent
+    no_main_check: true
 checksum:
   name_template: 'checksums.txt'
 changelog:
