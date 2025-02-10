@@ -39,11 +39,11 @@ jobs:
 
       - name: Helm Deps
         run: |
-          helm dep update chart/vke-cluster-agent
+          helm dep update charts/vke-cluster-agent
       
       - name: Helm Add Repo
         run: |
-          helm dependency list chart/vke-cluster-agent | tail -n +2 | awk '{print $1, $3}' | while read name url; do
+          helm dependency list charts/vke-cluster-agent | tail -n +2 | awk '{print $1, $3}' | while read name url; do
             helm repo add "$name" "$url"
           done
 
