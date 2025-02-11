@@ -39,3 +39,9 @@ func DeleteItemFromArray(a []string, item string) []string {
 	}
 	return a
 }
+
+func IsExpired(date time.Time, maintenanceWindow time.Duration) bool {
+	now := time.Now()
+
+	return now.Add(maintenanceWindow).After(date)
+}

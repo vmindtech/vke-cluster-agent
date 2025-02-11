@@ -51,6 +51,10 @@ func initApplication(a *application) *fiber.App {
 		return c.Status(fiber.StatusNotFound).JSON(response.NewErrorResponse(c.Context(), errBag))
 	})
 
+	// Check VKE Cluster Certificate Expiration
+	var isExpired chan bool
+
+	go di.InitAppService(a.Logger).CheckVKEClusterCertificateExpiration(isExpired)
 	return app
 }
 
