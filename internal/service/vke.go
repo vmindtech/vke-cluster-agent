@@ -7,8 +7,8 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/sirupsen/logrus"
 	"github.com/vmindtech/vke-cluster-agent/internal/dto/resource"
+	"k8s.io/klog"
 )
 
 const (
@@ -20,14 +20,10 @@ type IVKEService interface {
 	UpdateKubeconfig(clusterID string, token string, vkeURL string, kubeconfig string) error
 }
 
-type vkeService struct {
-	logger *logrus.Logger
-}
+type vkeService struct{}
 
-func NewVKEService(logger *logrus.Logger) IVKEService {
-	return &vkeService{
-		logger: logger,
-	}
+func NewVKEService() IVKEService {
+	return &vkeService{}
 }
 
 func (v *vkeService) GetCluster(clusterID string, token string, vkeURL string) (*resource.VKEClusterResponse, error) {
@@ -35,11 +31,8 @@ func (v *vkeService) GetCluster(clusterID string, token string, vkeURL string) (
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		v.logger.WithFields(logrus.Fields{
-			"cluster_id": clusterID,
-			"url":        url,
-			"error":      err,
-		}).Error("Failed to create request")
+		klog.Errorf("Failed to create request - cluster_id: %s, url: %s, error: %v",
+			clusterID, url, err)
 		return nil, fmt.Errorf("error creating request: %v", err)
 	}
 
@@ -48,48 +41,34 @@ func (v *vkeService) GetCluster(clusterID string, token string, vkeURL string) (
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		v.logger.WithFields(logrus.Fields{
-			"cluster_id": clusterID,
-			"url":        url,
-			"error":      err,
-		}).Error("Failed to send request")
+		klog.Errorf("Failed to send request - cluster_id: %s, url: %s, error: %v",
+			clusterID, url, err)
 		return nil, fmt.Errorf("error sending request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		v.logger.WithFields(logrus.Fields{
-			"cluster_id":  clusterID,
-			"status_code": resp.StatusCode,
-			"url":         url,
-		}).Error("Unexpected status code received")
+		klog.Errorf("Unexpected status code received - cluster_id: %s, url: %s, status_code: %d",
+			clusterID, url, resp.StatusCode)
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		v.logger.WithFields(logrus.Fields{
-			"cluster_id": clusterID,
-			"error":      err,
-		}).Error("Failed to read response body")
+		klog.Errorf("Failed to read response body - cluster_id: %s, url: %s, error: %v",
+			clusterID, url, err)
 		return nil, fmt.Errorf("error reading response: %v", err)
 	}
 
 	var cluster resource.VKEClusterResponse
 	if err := json.Unmarshal(body, &cluster); err != nil {
-		v.logger.WithFields(logrus.Fields{
-			"cluster_id": clusterID,
-			"body":       string(body),
-			"error":      err,
-		}).Error("Failed to parse JSON response")
+		klog.Errorf("Failed to parse JSON response - cluster_id: %s, body: %s, error: %v",
+			clusterID, string(body), err)
 		return nil, fmt.Errorf("error parsing JSON: %v", err)
 	}
 
-	v.logger.WithFields(logrus.Fields{
-		"cluster_id":     clusterID,
-		"cluster_name":   cluster.ClusterName,
-		"cluster_status": cluster.ClusterStatus,
-	}).Info("Successfully retrieved cluster information")
+	klog.V(2).Infof("Successfully retrieved cluster information - cluster_id: %s, cluster_name: %s, status: %s",
+		clusterID, cluster.ClusterName, cluster.ClusterStatus)
 
 	return &cluster, nil
 }

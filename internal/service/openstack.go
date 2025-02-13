@@ -6,7 +6,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/sirupsen/logrus"
+	"k8s.io/klog/v2"
 )
 
 type IOpenstackService interface {
@@ -14,13 +14,10 @@ type IOpenstackService interface {
 }
 
 type openstackService struct {
-	logger *logrus.Logger
 }
 
-func NewOpenstackService(l *logrus.Logger) IOpenstackService {
-	return &openstackService{
-		logger: l,
-	}
+func NewOpenstackService() IOpenstackService {
+	return &openstackService{}
 }
 
 func (o *openstackService) ValidateAndCreateSession(pjID, applicationCredentialID, applicationCredentialSecret, identityURL string) (*gophercloud.ProviderClient, error) {
@@ -33,12 +30,8 @@ func (o *openstackService) ValidateAndCreateSession(pjID, applicationCredentialI
 
 	provider, err := openstack.AuthenticatedClient(authOpts)
 	if err != nil {
-		o.logger.WithFields(logrus.Fields{
-			"identityURL":             identityURL,
-			"projectID":               pjID,
-			"applicationCredentialID": applicationCredentialID,
-			"error":                   err.Error(),
-		}).Error("OpenStack authentication failed")
+		klog.Errorf("OpenStack authentication failed - identityURL: %s, projectID: %s, applicationCredentialID: %s, error: %v",
+			identityURL, pjID, applicationCredentialID, err)
 		return nil, err
 	}
 

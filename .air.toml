@@ -7,7 +7,7 @@ cmd = "go build -o ./tmp/main ./cmd/agent"
 bin = "tmp/main"
 
 # Customize binary.
-full_bin = "./tmp/main"
+full_bin = "./tmp/main -v=4"
 
 # This log file places in your tmp_dir.
 log = "air_errors.log"

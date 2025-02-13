@@ -30,3 +30,12 @@ const (
 	MasterNodeLabelSelector = "node-role.kubernetes.io/control-plane=true"
 	WorkerNodeLabelSelector = "!node-role.kubernetes.io/master,!node-role.kubernetes.io/control-plane"
 )
+
+// New constants
+const (
+	// Her kontrol döngüsü arasındaki bekleme süresi
+	CertificateCheckInterval = 1 * time.Hour
+
+	// Yenileme işlemi için maksimum bekleme süresi
+	RenewalProcessTimeout = 30 * time.Minute
+)

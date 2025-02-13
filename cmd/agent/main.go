@@ -3,11 +3,11 @@ package main
 import (
 	"flag"
 	"os"
-	"os/signal"
-	"syscall"
+	"time"
 
 	di "github.com/vmindtech/vke-cluster-agent"
 	"github.com/vmindtech/vke-cluster-agent/config"
+	"github.com/vmindtech/vke-cluster-agent/pkg/constants"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
@@ -45,31 +45,32 @@ func main() {
 
 	appService := di.InitAppService(k8sClient, k8sConfig)
 
-	// Start certificate expiration check
-	isExpired := make(chan bool)
-	go appService.CheckVKEClusterCertificateExpiration(isExpired)
+	for {
+		isExpired := make(chan bool)
+		go appService.CheckVKEClusterCertificateExpiration(isExpired)
 
-	// Start certificate renewal process
-	go func() {
-		if err := appService.RenewMasterNodesCertificates(); err != nil {
-			klog.ErrorS(err, "Failed to renew master certificates",
-				"cluster_id", clID,
-				"component", "certificate_renewal")
-			return
+		select {
+		case expired := <-isExpired:
+			if expired {
+				klog.V(0).Info("Certificate expiration detected, starting renewal process")
+
+				if err := appService.RenewMasterNodesCertificates(); err != nil {
+					klog.Errorf("Failed to renew master certificates: %v", err)
+					continue
+				}
+
+				if err := appService.RestartWorkerNodes(); err != nil {
+					klog.Errorf("Failed to restart worker nodes: %v", err)
+					continue
+				}
+
+				klog.V(0).Info("Certificate renewal process completed successfully")
+			}
+		case <-time.After(constants.RenewalProcessTimeout):
+			klog.V(2).Info("Renewal process timed out, restarting check cycle")
 		}
 
-		if err := appService.RestartWorkerNodes(); err != nil {
-			klog.ErrorS(err, "Failed to restart worker nodes",
-				"cluster_id", clID,
-				"component", "worker_restart")
-		}
-	}()
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
-
-	klog.V(0).InfoS("Shutting down VKE cluster agent",
-		"cluster_id", clID,
-		"component", "shutdown")
+		// Kısa bir bekleme süresi ekleyerek sürekli kontrol yapmayı önleyelim
+		time.Sleep(constants.CertificateCheckInterval)
+	}
 }

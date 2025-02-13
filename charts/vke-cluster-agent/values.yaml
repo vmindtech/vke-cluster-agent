@@ -87,3 +87,6 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+agent:
+  verbosityLevel: "2"
