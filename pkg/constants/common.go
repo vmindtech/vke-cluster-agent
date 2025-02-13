@@ -19,3 +19,14 @@ const (
 const (
 	VKECheckCertificateExpirationInterval = 1 * time.Hour
 )
+
+// RKE2 Related Constants
+const (
+	RKE2RestartWaitDuration = 30 * time.Second
+)
+
+// Node Label Selectors
+const (
+	MasterNodeLabelSelector = "node-role.kubernetes.io/control-plane=true"
+	WorkerNodeLabelSelector = "!node-role.kubernetes.io/master,!node-role.kubernetes.io/control-plane"
+)

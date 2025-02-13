@@ -4,9 +4,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"math/rand"
+	"strings"
 	"time"
 
 	"gorm.io/datatypes"
+	"k8s.io/client-go/kubernetes"
 )
 
 func Base64Encoder(data string) string {
@@ -42,6 +44,38 @@ func DeleteItemFromArray(a []string, item string) []string {
 
 func IsExpired(date time.Time, maintenanceWindow time.Duration) bool {
 	now := time.Now()
-
 	return now.Add(maintenanceWindow).After(date)
+}
+
+func GetKubernetesVersion(client *kubernetes.Clientset) string {
+	version, err := client.Discovery().ServerVersion()
+	if err != nil {
+		return "0.0.0"
+	}
+	return version.String()
+}
+
+func IsVersionGreaterOrEqual(version, compareWith string) bool {
+	version = strings.TrimPrefix(version, "v")
+	compareWith = strings.TrimPrefix(compareWith, "v")
+
+	vParts := strings.Split(version, ".")
+	cParts := strings.Split(compareWith, ".")
+
+	for len(vParts) < 3 {
+		vParts = append(vParts, "0")
+	}
+	for len(cParts) < 3 {
+		cParts = append(cParts, "0")
+	}
+
+	if vParts[0] != cParts[0] {
+		return vParts[0] > cParts[0]
+	}
+
+	if vParts[1] != cParts[1] {
+		return vParts[1] > cParts[1]
+	}
+
+	return vParts[2] >= cParts[2]
 }

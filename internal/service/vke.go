@@ -1,22 +1,23 @@
 package service
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 
-	"github.com/k0kubun/pp"
 	"github.com/sirupsen/logrus"
 	"github.com/vmindtech/vke-cluster-agent/internal/dto/resource"
 )
 
 const (
-	getClusterEndpoint = "/cluster"
+	getClusterEndpoint = "cluster"
 )
 
 type IVKEService interface {
 	GetCluster(clusterID string, token string, vkeURL string) (*resource.VKEClusterResponse, error)
+	UpdateKubeconfig(clusterID string, token string, vkeURL string, kubeconfig string) error
 }
 
 type vkeService struct {
@@ -30,7 +31,7 @@ func NewVKEService(logger *logrus.Logger) IVKEService {
 }
 
 func (v *vkeService) GetCluster(clusterID string, token string, vkeURL string) (*resource.VKEClusterResponse, error) {
-	url := fmt.Sprintf("%s/%s/%s?details=true", getClusterEndpoint, vkeURL, clusterID)
+	url := fmt.Sprintf("%s/%s/%s?details=true", vkeURL, getClusterEndpoint, clusterID)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -42,7 +43,7 @@ func (v *vkeService) GetCluster(clusterID string, token string, vkeURL string) (
 		return nil, fmt.Errorf("error creating request: %v", err)
 	}
 
-	req.Header.Set("X-Auth-Token", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("X-Auth-Token", token)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -90,7 +91,41 @@ func (v *vkeService) GetCluster(clusterID string, token string, vkeURL string) (
 		"cluster_status": cluster.ClusterStatus,
 	}).Info("Successfully retrieved cluster information")
 
-	pp.Println(cluster)
-
 	return &cluster, nil
+}
+
+func (v *vkeService) UpdateKubeconfig(clusterID string, token string, vkeURL string, kubeconfig string) error {
+	url := fmt.Sprintf("%s/kubeconfig/%s", vkeURL, clusterID)
+
+	payload := struct {
+		Kubeconfig string `json:"kubeconfig"`
+	}{
+		Kubeconfig: kubeconfig,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("error marshaling kubeconfig: %v", err)
+	}
+
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("error creating request: %v", err)
+	}
+
+	req.Header.Set("X-Auth-Token", token)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("error sending request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	return nil
 }

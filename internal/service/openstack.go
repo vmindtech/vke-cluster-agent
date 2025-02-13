@@ -28,7 +28,6 @@ func (o *openstackService) ValidateAndCreateSession(pjID, applicationCredentialI
 		IdentityEndpoint:            identityURL,
 		ApplicationCredentialID:     applicationCredentialID,
 		ApplicationCredentialSecret: applicationCredentialSecret,
-		TenantID:                    pjID,
 		AllowReauth:                 true,
 	}
 
