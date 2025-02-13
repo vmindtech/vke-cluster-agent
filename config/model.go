@@ -8,9 +8,8 @@ const (
 	productionEnv = "production"
 )
 
-type WebConfig struct {
+type AgentConfig struct {
 	AppName string
-	Port    string
 	Env     string
 	Version string
 }
@@ -26,8 +25,9 @@ type VKEConfig struct {
 	IdentityURL                 string
 	ApplicationCredentialID     string
 	ApplicationCredentialSecret string
+	VKEURL                      string
 }
 
-func (w WebConfig) IsProductionEnv() bool {
-	return w.Env == productionEnv
+func (a AgentConfig) IsProductionEnv() bool {
+	return a.Env == productionEnv
 }

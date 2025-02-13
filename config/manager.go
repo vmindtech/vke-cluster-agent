@@ -14,13 +14,13 @@ const (
 var GlobalConfig IConfigureManager
 
 type IConfigureManager interface {
-	GetWebConfig() WebConfig
+	GetWebConfig() AgentConfig
 	GetLanguageConfig() LanguageConfig
 	GetVKEConfig() VKEConfig
 }
 
 type configureManager struct {
-	Web      WebConfig
+	Web      AgentConfig
 	Language LanguageConfig
 	VKE      VKEConfig
 }
@@ -41,10 +41,9 @@ func NewConfigureManager() IConfigureManager {
 	return GlobalConfig
 }
 
-func loadWebConfig() WebConfig {
-	return WebConfig{
+func loadWebConfig() AgentConfig {
+	return AgentConfig{
 		AppName: viper.GetString("APP_NAME"),
-		Port:    viper.GetString("PORT"),
 		Env:     viper.GetString("ENV"),
 		Version: viper.GetString("VERSION"),
 	}
@@ -59,7 +58,7 @@ func loadLanguageConfig() LanguageConfig {
 	}
 }
 
-func (c *configureManager) GetWebConfig() WebConfig {
+func (c *configureManager) GetWebConfig() AgentConfig {
 	return c.Web
 }
 
@@ -76,6 +75,7 @@ func loadVKEConfig() VKEConfig {
 		ClusterID:                   viper.GetString("VKE_CLUSTER_ID"),
 		ProjectID:                   viper.GetString("VKE_PROJECT_ID"),
 		IdentityURL:                 viper.GetString("VKE_IDENTITY_URL"),
+		VKEURL:                      viper.GetString("VKE_URL"),
 		ApplicationCredentialID:     viper.GetString("VKE_APPLICATION_CREDENTIAL_ID"),
 		ApplicationCredentialSecret: viper.GetString("VKE_APPLICATION_CREDENTIAL_SECRET"),
 	}
