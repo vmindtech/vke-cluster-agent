@@ -1,21 +1,13 @@
-package goboilerplate
+package di
 
 import (
-	"github.com/sirupsen/logrus"
-	"github.com/vmindtech/vke-cluster-agent/internal/handler"
-	"github.com/vmindtech/vke-cluster-agent/internal/route"
 	"github.com/vmindtech/vke-cluster-agent/internal/service"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
-func InitHealthCheckHandler() handler.IHealthCheckHandler {
-	iHealthCheckHandler := handler.NewHealthCheckHandler()
-	return iHealthCheckHandler
-}
-
-func InitRoute(l *logrus.Logger) route.IRoute {
-	iAppService := service.NewAppService(l)
-
-	iAppHandler := handler.NewAppHandler(iAppService)
-	iRoute := route.NewRoute(iAppHandler)
-	return iRoute
+func InitAppService(k8sClient *kubernetes.Clientset, k8sConfig *rest.Config) service.IAppService {
+	openstackService := service.NewOpenstackService()
+	vkeService := service.NewVKEService()
+	return service.NewAppService(openstackService, vkeService, k8sClient, k8sConfig)
 }

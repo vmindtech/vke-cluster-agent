@@ -7,7 +7,7 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: vmindtech/vke-application
+  repository: vmindtech/vke-cluster-agent
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
@@ -53,13 +53,13 @@ environments:
   ENV: "production"
   APP_NAME: "vke-cluster-agent"
   VERSION: "0.1.0"
-  PORT: 80
   VKE_CLUSTER_ID: "1"
   VKE_PROJECT_ID: "1"
   VKE_IDENTITY_URL: "https://identity.domain.com"
   VKE_APPLICATION_CREDENTIAL_ID: 1
   VKE_APPLICATION_CREDENTIAL_SECRET: ""
 
+namespace: kube-system
 
 resources: 
   limits:
@@ -68,23 +68,6 @@ resources:
   requests:
     cpu: 100m
     memory: 128Mi
-
-# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-livenessProbe:
-  httpGet:
-    path: /liveness
-    port: http
-readinessProbe:
-  httpGet:
-    path: /readiness
-    port: http
-
-# This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
-autoscaling:
-  enabled: true
-  minReplicas: 2
-  maxReplicas: 5
-  targetCPUUtilizationPercentage: 80
 
 # Additional volumes on the output Deployment definition.
 volumes: []
@@ -104,3 +87,6 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+agent:
+  verbosityLevel: "2"
