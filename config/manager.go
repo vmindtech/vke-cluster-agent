@@ -26,11 +26,18 @@ type configureManager struct {
 }
 
 func NewConfigureManager() IConfigureManager {
-	viper.SetConfigFile("config-" + os.Getenv("golang_env") + ".json")
-	viper.SetConfigType("json")
-	viper.AddConfigPath("./config-" + os.Getenv("golang_env") + ".json")
+	viper.AutomaticEnv()
 
-	_ = viper.ReadInConfig()
+	configFile := "config-" + os.Getenv("golang_env") + ".json"
+	viper.SetConfigFile(configFile)
+	viper.SetConfigType("json")
+
+	if err := viper.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+		} else {
+			panic(err)
+		}
+	}
 
 	GlobalConfig = &configureManager{
 		Web:      loadWebConfig(),

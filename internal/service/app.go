@@ -67,7 +67,7 @@ func (a *appService) CheckVKEClusterCertificateExpiration(isExpired chan bool) {
 	for {
 		token := a.getLatestToken()
 		if token == "" {
-			klog.ErrorS(nil, "Token alınamadı",
+			klog.ErrorS(nil, "Failed to get token",
 				"cluster_id", clID,
 				"component", "certificate_checker")
 			return
