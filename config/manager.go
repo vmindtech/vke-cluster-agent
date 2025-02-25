@@ -32,9 +32,10 @@ func NewConfigureManager() IConfigureManager {
 	viper.SetConfigFile(configFile)
 	viper.SetConfigType("json")
 
-	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-		} else {
+	err := viper.ReadInConfig()
+
+	if err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			panic(err)
 		}
 	}
