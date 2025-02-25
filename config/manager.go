@@ -28,15 +28,16 @@ type configureManager struct {
 func NewConfigureManager() IConfigureManager {
 	viper.AutomaticEnv()
 
-	configFile := "config-" + os.Getenv("golang_env") + ".json"
-	viper.SetConfigFile(configFile)
-	viper.SetConfigType("json")
+	if os.Getenv("golang_env") == "development" {
+		configFile := "config-" + os.Getenv("golang_env") + ".json"
+		viper.SetConfigFile(configFile)
+		viper.SetConfigType("json")
 
-	err := viper.ReadInConfig()
-
-	if err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			panic(err)
+		err := viper.ReadInConfig()
+		if err != nil {
+			if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+				panic(err)
+			}
 		}
 	}
 
