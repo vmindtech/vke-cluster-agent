@@ -2,6 +2,16 @@ apiVersion: v1
 entries:
   vke-cluster-agent:
   - apiVersion: v2
+    appVersion: 0.2.8
+    created: "2025-02-25T14:11:25.556323404Z"
+    description: A Helm chart for VKE Cluster Agent
+    digest: 0b58610328ba06c3b9b4c71298e5a5c5dbc1d68996d9c6d7f6941a390185d6fb
+    name: vke-cluster-agent
+    type: application
+    urls:
+    - https://github.com/vmindtech/vke-cluster-agent/releases/download/vke-cluster-agent-0.2.8/vke-cluster-agent-0.2.8.tgz
+    version: 0.2.8
+  - apiVersion: v2
     appVersion: 0.2.6
     created: "2025-02-25T13:10:29.359282852Z"
     description: A Helm chart for VKE Cluster Agent
@@ -51,4 +61,4 @@ entries:
     urls:
     - https://github.com/vmindtech/vke-cluster-agent/releases/download/vke-cluster-agent-0.1.10/vke-cluster-agent-0.1.10.tgz
     version: 0.1.10
-generated: "2025-02-25T13:10:29.359306095Z"
+generated: "2025-02-25T14:11:25.556370973Z"
