@@ -8,7 +8,7 @@ COPY . ./
 
 RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o vke-cluster-agent ./cmd/agent
 
-FROM gcr.io/distroless/base-debian11 AS build-release-stage
+FROM alpine:3.21.3 AS build-release-stage
 
 WORKDIR /
 
