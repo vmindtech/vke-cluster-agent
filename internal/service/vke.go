@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 
 	"github.com/vmindtech/vke-cluster-agent/internal/dto/resource"
@@ -53,18 +52,11 @@ func (v *vkeService) GetCluster(clusterID string, token string, vkeURL string) (
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		klog.Errorf("Failed to read response body - cluster_id: %s, url: %s, error: %v",
-			clusterID, url, err)
-		return nil, fmt.Errorf("error reading response: %v", err)
-	}
-
 	var cluster resource.VKEClusterResponse
-	if err := json.Unmarshal(body, &cluster); err != nil {
-		klog.Errorf("Failed to parse JSON response - cluster_id: %s, body: %s, error: %v",
-			clusterID, string(body), err)
-		return nil, fmt.Errorf("error parsing JSON: %v", err)
+	if err = json.NewDecoder(resp.Body).Decode(&cluster); err != nil {
+		klog.Errorf("Failed to decode JSON response - cluster_id: %s, url: %s, error: %v",
+			clusterID, url, err)
+		return nil, fmt.Errorf("error decoding response: %v", err)
 	}
 
 	klog.V(2).Infof("Successfully retrieved cluster information - cluster_id: %s, cluster_name: %s, status: %s",
