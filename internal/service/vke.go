@@ -56,7 +56,7 @@ func (v *vkeService) GetCluster(clusterID string, token string, vkeURL string) (
 	}
 
 	klog.V(2).Infof("Successfully retrieved cluster information - cluster_id: %s, cluster_name: %s, status: %s",
-		clusterID, respDecoder.ClusterName, respDecoder.ClusterStatus)
+		clusterID, respDecoder.Data.ClusterName, respDecoder.Data.ClusterStatus)
 
 	return &respDecoder, nil
 }

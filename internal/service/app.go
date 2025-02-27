@@ -90,10 +90,10 @@ func (a *appService) CheckVKEClusterCertificateExpiration(isExpired chan bool) {
 			"cluster_id", clID,
 			"component", "certificate_checker")
 
-		if IsExpired(getClusterResponse.ClusterCertificateExpireDate, constants.OneWeekMaintenanceWindow) {
+		if IsExpired(getClusterResponse.Data.ClusterCertificateExpireDate, constants.OneWeekMaintenanceWindow) {
 			klog.V(0).InfoS("Certificate expiration detected",
 				"cluster_id", clID,
-				"expire_date", getClusterResponse.ClusterCertificateExpireDate,
+				"expire_date", getClusterResponse.Data.ClusterCertificateExpireDate,
 				"component", "certificate_checker")
 			isExpired <- true
 		}
