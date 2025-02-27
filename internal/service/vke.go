@@ -26,43 +26,39 @@ func NewVKEService() IVKEService {
 }
 
 func (v *vkeService) GetCluster(clusterID string, token string, vkeURL string) (*resource.VKEClusterResponse, error) {
-	url := fmt.Sprintf("%s/%s/%s?details=true", vkeURL, getClusterEndpoint, clusterID)
-
-	req, err := http.NewRequest("GET", url, nil)
+	r, err := http.NewRequest("GET", fmt.Sprintf("%s/%s/%s?details=true", vkeURL, getClusterEndpoint, clusterID), nil)
 	if err != nil {
-		klog.Errorf("Failed to create request - cluster_id: %s, url: %s, error: %v",
-			clusterID, url, err)
+		klog.Errorf("Failed to create request - cluster_id: %s", clusterID)
 		return nil, fmt.Errorf("error creating request: %v", err)
 	}
 
-	req.Header.Set("X-Auth-Token", token)
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-Auth-Token", token)
 
 	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := client.Do(r)
 	if err != nil {
-		klog.Errorf("Failed to send request - cluster_id: %s, url: %s, error: %v",
-			clusterID, url, err)
+		klog.Errorf("Failed to send request - cluster_id: %s", clusterID)
 		return nil, fmt.Errorf("error sending request: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		klog.Errorf("Unexpected status code received - cluster_id: %s, url: %s, status_code: %d",
-			clusterID, url, resp.StatusCode)
+		klog.Errorf("Unexpected status code received - cluster_id: %s, status_code: %d",
+			clusterID, resp.StatusCode)
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	var cluster resource.VKEClusterResponse
-	if err = json.NewDecoder(resp.Body).Decode(&cluster); err != nil {
-		klog.Errorf("Failed to decode JSON response - cluster_id: %s, url: %s, error: %v",
-			clusterID, url, err)
+	var respDecoder resource.VKEClusterResponse
+	if err = json.NewDecoder(resp.Body).Decode(&respDecoder); err != nil {
+		klog.Errorf("Failed to decode response - cluster_id: %s", clusterID)
 		return nil, fmt.Errorf("error decoding response: %v", err)
 	}
 
 	klog.V(2).Infof("Successfully retrieved cluster information - cluster_id: %s, cluster_name: %s, status: %s",
-		clusterID, cluster.ClusterName, cluster.ClusterStatus)
+		clusterID, respDecoder.ClusterName, respDecoder.ClusterStatus)
 
-	return &cluster, nil
+	return &respDecoder, nil
 }
 
 func (v *vkeService) UpdateKubeconfig(clusterID string, token string, vkeURL string, kubeconfig string) error {
