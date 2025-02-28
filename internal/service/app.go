@@ -196,26 +196,57 @@ func (a *appService) RenewMasterNodesCertificates() error {
 			"node_uid", firstMaster.UID,
 			"component", "certificate_renewer")
 
-		klog.V(2).InfoS("Executing RKE2 restart command",
+		klog.V(2).InfoS("Executing RKE2 stop command",
 			"cluster_id", clID,
 			"node", firstMaster.Name,
 			"component", "certificate_renewer")
 
+		// Stop RKE2 server
 		stdout, stderr, err := executor.Execute(firstMaster.Name, []string{
-			"systemctl", "restart", "rke2-server",
+			"systemctl", "stop", "rke2-server",
 		})
 		if err != nil {
-			klog.ErrorS(err, "Failed to restart RKE2 server",
+			klog.ErrorS(err, "Failed to stop RKE2 server",
 				"cluster_id", clID,
 				"node", firstMaster.Name,
 				"node_uid", firstMaster.UID,
 				"stderr", stderr.String(),
 				"component", "certificate_renewer")
-			return fmt.Errorf("failed to execute command on node %s: %v, stderr: %s",
+			return fmt.Errorf("failed to stop RKE2 server on node %s: %v, stderr: %s",
 				firstMaster.Name, err, stderr.String())
 		}
 
-		klog.V(0).InfoS("Successfully restarted RKE2 server service",
+		// Rotate certificates
+		stdout, stderr, err = executor.Execute(firstMaster.Name, []string{
+			"rke2", "certificate", "rotate",
+		})
+		if err != nil {
+			klog.ErrorS(err, "Failed to rotate certificates",
+				"cluster_id", clID,
+				"node", firstMaster.Name,
+				"node_uid", firstMaster.UID,
+				"stderr", stderr.String(),
+				"component", "certificate_renewer")
+			return fmt.Errorf("failed to rotate certificates on node %s: %v, stderr: %s",
+				firstMaster.Name, err, stderr.String())
+		}
+
+		// Start RKE2 server
+		stdout, stderr, err = executor.Execute(firstMaster.Name, []string{
+			"systemctl", "start", "rke2-server",
+		})
+		if err != nil {
+			klog.ErrorS(err, "Failed to start RKE2 server",
+				"cluster_id", clID,
+				"node", firstMaster.Name,
+				"node_uid", firstMaster.UID,
+				"stderr", stderr.String(),
+				"component", "certificate_renewer")
+			return fmt.Errorf("failed to start RKE2 server on node %s: %v, stderr: %s",
+				firstMaster.Name, err, stderr.String())
+		}
+
+		klog.V(0).InfoS("Successfully completed certificate rotation",
 			"cluster_id", clID,
 			"node", firstMaster.Name,
 			"node_uid", firstMaster.UID,
