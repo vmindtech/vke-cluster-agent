@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -35,7 +36,12 @@ func (v *vkeService) GetCluster(clusterID string, token string, vkeURL string) (
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("X-Auth-Token", token)
 
-	client := &http.Client{}
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	client := &http.Client{Transport: tr}
 	resp, err := client.Do(r)
 	if err != nil {
 		klog.Errorf("Failed to send request - cluster_id: %s", clusterID)
@@ -83,7 +89,12 @@ func (v *vkeService) UpdateKubeconfig(clusterID string, token string, vkeURL str
 	req.Header.Set("X-Auth-Token", token)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	client := &http.Client{Transport: tr}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("error sending request: %v", err)
