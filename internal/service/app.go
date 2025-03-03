@@ -203,7 +203,7 @@ func (a *appService) RenewMasterNodesCertificates() error {
 
 		// Stop RKE2 server
 		stdout, stderr, err := executor.Execute(firstMaster.Name, []string{
-			"systemctl", "stop", "rke2-server",
+			"sudo", "systemctl", "stop", "rke2-server",
 		})
 		if err != nil {
 			klog.ErrorS(err, "Failed to stop RKE2 server",
@@ -218,7 +218,7 @@ func (a *appService) RenewMasterNodesCertificates() error {
 
 		// Rotate certificates
 		stdout, stderr, err = executor.Execute(firstMaster.Name, []string{
-			"rke2", "certificate", "rotate",
+			"sudo", "rke2", "certificate", "rotate",
 		})
 		if err != nil {
 			klog.ErrorS(err, "Failed to rotate certificates",
@@ -233,7 +233,7 @@ func (a *appService) RenewMasterNodesCertificates() error {
 
 		// Start RKE2 server
 		stdout, stderr, err = executor.Execute(firstMaster.Name, []string{
-			"systemctl", "start", "rke2-server",
+			"sudo", "systemctl", "start", "rke2-server",
 		})
 		if err != nil {
 			klog.ErrorS(err, "Failed to start RKE2 server",
@@ -264,8 +264,7 @@ func (a *appService) RenewMasterNodesCertificates() error {
 
 		// Get updated kubeconfig
 		kubeconfigCommand := []string{
-			"sh", "-c",
-			"cat /etc/rancher/rke2/rke2.yaml",
+			"sudo", "cat", "/etc/rancher/rke2/rke2.yaml",
 		}
 
 		stdout, stderr, err = executor.Execute(firstMaster.Name, kubeconfigCommand)
@@ -294,7 +293,7 @@ func (a *appService) RenewMasterNodesCertificates() error {
 			klog.InfoS("Starting certificate renewal process on subsequent master node", "node", node.Name)
 
 			_, stderr, err := executor.Execute(node.Name, []string{
-				"systemctl", "restart", "rke2-server",
+				"sudo", "systemctl", "restart", "rke2-server",
 			})
 			if err != nil {
 				return fmt.Errorf("failed to execute command on node %s: %v, stderr: %s",
@@ -350,7 +349,7 @@ func (a *appService) RestartWorkerNodes() error {
 			"component", "worker_restarter")
 
 		_, stderr, err := executor.Execute(node.Name, []string{
-			"systemctl", "restart", "rke2-agent",
+			"sudo", "systemctl", "restart", "rke2-agent",
 		})
 		if err != nil {
 			klog.ErrorS(err, "Failed to restart RKE2 agent",
