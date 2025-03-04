@@ -100,4 +100,19 @@ agent:
   verbosityLevel: "2"
 
 rbac:
-  create: true 
+  create: true
+  nodeExec:
+    create: true
+    rules:
+      - apiGroups: [""]
+        resources: ["nodes/proxy"]
+        verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+      - apiGroups: [""]
+        resources: ["nodes"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: [""]
+        resources: ["pods/exec"]
+        verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+      - apiGroups: [""]
+        resources: ["pods"]
+        verbs: ["get", "list", "watch"] 
