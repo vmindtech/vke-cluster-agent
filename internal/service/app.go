@@ -132,8 +132,7 @@ func (e *SPDYExecutor) Execute(nodeName string, command []string) (stdout, stder
 	req := e.k8sClient.CoreV1().RESTClient().Post().
 		Resource("nodes").
 		Name(nodeName).
-		SubResource("proxy").
-		Suffix("/exec")
+		SubResource("exec")
 
 	req.VersionedParams(&corev1.PodExecOptions{
 		Command: command,
@@ -143,7 +142,7 @@ func (e *SPDYExecutor) Execute(nodeName string, command []string) (stdout, stder
 
 	exec, err := remotecommand.NewSPDYExecutor(e.k8sConfig, "POST", req.URL())
 	if err != nil {
-		return stdout, stderr, fmt.Errorf("failed to create SPDY executor: %v", err)
+		return stdout, stderr, fmt.Errorf("failed to create executor: %v", err)
 	}
 
 	err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
