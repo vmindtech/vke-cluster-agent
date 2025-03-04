@@ -42,9 +42,8 @@ func DeleteItemFromArray(a []string, item string) []string {
 	return a
 }
 
-func IsExpired(date time.Time, maintenanceWindow time.Duration) bool {
-	now := time.Now()
-	return now.Add(maintenanceWindow).After(date)
+func IsExpired(currentDate time.Time, date time.Time, maintenanceWindow time.Duration) bool {
+	return currentDate.Add(maintenanceWindow).After(date)
 }
 
 func GetKubernetesVersion(client *kubernetes.Clientset) string {

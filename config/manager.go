@@ -17,12 +17,14 @@ type IConfigureManager interface {
 	GetWebConfig() AgentConfig
 	GetLanguageConfig() LanguageConfig
 	GetVKEConfig() VKEConfig
+	GetIsTestMode() bool
 }
 
 type configureManager struct {
-	Web      AgentConfig
-	Language LanguageConfig
-	VKE      VKEConfig
+	Web        AgentConfig
+	Language   LanguageConfig
+	VKE        VKEConfig
+	IsTestMode bool
 }
 
 func NewConfigureManager() IConfigureManager {
@@ -42,12 +44,17 @@ func NewConfigureManager() IConfigureManager {
 	}
 
 	GlobalConfig = &configureManager{
-		Web:      loadWebConfig(),
-		Language: loadLanguageConfig(),
-		VKE:      loadVKEConfig(),
+		Web:        loadWebConfig(),
+		Language:   loadLanguageConfig(),
+		VKE:        loadVKEConfig(),
+		IsTestMode: loadIsTestMode(),
 	}
 
 	return GlobalConfig
+}
+
+func loadIsTestMode() bool {
+	return viper.GetBool("IS_TEST_MODE")
 }
 
 func loadWebConfig() AgentConfig {
@@ -77,6 +84,10 @@ func (c *configureManager) GetLanguageConfig() LanguageConfig {
 
 func (c *configureManager) GetVKEConfig() VKEConfig {
 	return c.VKE
+}
+
+func (c *configureManager) GetIsTestMode() bool {
+	return c.IsTestMode
 }
 
 func loadVKEConfig() VKEConfig {

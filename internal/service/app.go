@@ -64,6 +64,15 @@ func (a *appService) CheckVKEClusterCertificateExpiration(isExpired chan bool) {
 	clID := config.GlobalConfig.GetVKEConfig().ClusterID
 	vkeURL := config.GlobalConfig.GetVKEConfig().VKEURL
 
+	var getCurrentTime func() time.Time
+	if config.GlobalConfig.GetIsTestMode() {
+		getCurrentTime = func() time.Time {
+			return time.Now().AddDate(0, 0, 359)
+		}
+	} else {
+		getCurrentTime = time.Now
+	}
+
 	for {
 		token := a.getLatestToken()
 		if token == "" {
@@ -90,7 +99,7 @@ func (a *appService) CheckVKEClusterCertificateExpiration(isExpired chan bool) {
 			"cluster_id", clID,
 			"component", "certificate_checker")
 
-		if IsExpired(getClusterResponse.Data.ClusterCertificateExpireDate, constants.OneWeekMaintenanceWindow) {
+		if IsExpired(getCurrentTime(), getClusterResponse.Data.ClusterCertificateExpireDate, constants.OneWeekMaintenanceWindow) {
 			klog.V(0).InfoS("Certificate expiration detected",
 				"cluster_id", clID,
 				"expire_date", getClusterResponse.Data.ClusterCertificateExpireDate,
