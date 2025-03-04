@@ -98,3 +98,6 @@ affinity: {}
 
 agent:
   verbosityLevel: "2"
+
+rbac:
+  create: true 

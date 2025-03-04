@@ -13,4 +13,41 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: cluster-admin
+{{- end }}
+
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "vke-cluster-agent.fullname" . }}-node-exec
+  labels:
+    {{- include "vke-cluster-agent.labels" . | nindent 4 }}
+rules:
+- apiGroups: [""]
+  resources: ["nodes/proxy"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "vke-cluster-agent.fullname" . }}-node-exec
+  labels:
+    {{- include "vke-cluster-agent.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "vke-cluster-agent.fullname" . }}-node-exec
+subjects:
+- kind: ServiceAccount
+  name: {{ include "vke-cluster-agent.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
 {{- end }} 
