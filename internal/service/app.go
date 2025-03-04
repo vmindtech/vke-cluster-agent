@@ -146,7 +146,7 @@ func (e *SPDYExecutor) Execute(nodeName string, command []string) (stdout, stder
 		return stdout, stderr, fmt.Errorf("failed to create SPDY executor: %v", err)
 	}
 
-	err = exec.Stream(remotecommand.StreamOptions{
+	err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
 		Stdout: &stdout,
 		Stderr: &stderr,
 	})
@@ -171,7 +171,7 @@ func (e *WebsocketExecutor) Execute(nodeName string, command []string) (stdout, 
 		return stdout, stderr, fmt.Errorf("failed to create executor: %v", err)
 	}
 
-	err = exec.Stream(remotecommand.StreamOptions{
+	err = exec.StreamWithContext(context.Background(), remotecommand.StreamOptions{
 		Stdout: &stdout,
 		Stderr: &stderr,
 	})
