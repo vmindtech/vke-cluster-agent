@@ -104,12 +104,12 @@ rbac:
   nodeExec:
     create: true
     rules:
-      - apiGroups: ["*"]
-        resources: ["nodes", "nodes/*"]
+      - apiGroups: ["", "*"]
+        resources: ["nodes", "nodes/proxy"]
         verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
       - apiGroups: [""]
         resources: ["pods/exec"]
         verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
-      - apiGroups: ["*"]
+      - apiGroups: ["", "*"]
         resources: ["pods", "pods/*"]
         verbs: ["create", "get", "list", "watch", "update", "patch", "delete"] 
