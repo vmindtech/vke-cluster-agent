@@ -132,7 +132,8 @@ func (e *SPDYExecutor) Execute(nodeName string, command []string) (stdout, stder
 	req := e.k8sClient.CoreV1().RESTClient().Post().
 		Resource("nodes").
 		Name(nodeName).
-		SubResource("exec")
+		SubResource("proxy").
+		Suffix("/exec")
 
 	req.VersionedParams(&corev1.PodExecOptions{
 		Command: command,
