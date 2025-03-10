@@ -212,7 +212,7 @@ func (a *appService) RenewMasterNodesCertificates() error {
 
 		// Stop RKE2 server
 		stdout, stderr, err := executor.Execute(firstMaster.Name, []string{
-			"systemctl", "stop", "rke2-server",
+			"systemctl", "restart", "rke2-server",
 		})
 		if err != nil {
 			klog.ErrorS(err, "Failed to stop RKE2 server",
@@ -225,46 +225,6 @@ func (a *appService) RenewMasterNodesCertificates() error {
 			return fmt.Errorf("failed to stop RKE2 server on node %s: %v, stderr: %s",
 				firstMaster.Name, err, stderr.String())
 		}
-
-		// Rotate certificates
-		stdout, stderr, err = executor.Execute(firstMaster.Name, []string{
-			"rke2", "certificate", "rotate",
-		})
-		if err != nil {
-			klog.ErrorS(err, "Failed to rotate certificates",
-				"cluster_id", clID,
-				"node", firstMaster.Name,
-				"node_uid", firstMaster.UID,
-				"stderr", stderr.String(),
-				"stdout", stdout.String(),
-				"component", "certificate_renewer")
-			return fmt.Errorf("failed to rotate certificates on node %s: %v, stderr: %s",
-				firstMaster.Name, err, stderr.String())
-		}
-
-		// Start RKE2 server
-		stdout, stderr, err = executor.Execute(firstMaster.Name, []string{
-			"systemctl", "start", "rke2-server",
-		})
-		if err != nil {
-			klog.ErrorS(err, "Failed to start RKE2 server",
-				"cluster_id", clID,
-				"node", firstMaster.Name,
-				"node_uid", firstMaster.UID,
-				"stderr", stderr.String(),
-				"stdout", stdout.String(),
-				"component", "certificate_renewer")
-			return fmt.Errorf("failed to start RKE2 server on node %s: %v, stderr: %s",
-				firstMaster.Name, err, stderr.String())
-		}
-
-		klog.V(0).InfoS("Successfully completed certificate rotation",
-			"cluster_id", clID,
-			"node", firstMaster.Name,
-			"node_uid", firstMaster.UID,
-			"stdout", stdout.String(),
-			"stderr", stderr.String(),
-			"component", "certificate_renewer")
 
 		klog.V(3).InfoS("Waiting for RKE2 restart",
 			"cluster_id", clID,
