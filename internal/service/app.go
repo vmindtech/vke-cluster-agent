@@ -182,17 +182,23 @@ func (a *appService) RenewMasterNodesCertificates() error {
 }
 
 func isMasterNode(node *v1.Node) bool {
-	_, isMaster := node.Labels["node-role.kubernetes.io/master"]
-	_, isControlPlane := node.Labels["node-role.kubernetes.io/control-plane"]
+	labels := node.Labels
+	_, isMaster := labels["node-role.kubernetes.io/master"]
+	_, isControlPlane := labels["node-role.kubernetes.io/control-plane"]
 	return isMaster || isControlPlane
 }
 
 func getFirstMasterNode(client *kubernetes.Clientset) (*v1.Node, error) {
 	nodes, err := client.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{
-		LabelSelector: "node-role.kubernetes.io/master=,node-role.kubernetes.io/control-plane=",
+		LabelSelector: "node-role.kubernetes.io/control-plane",
 	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list master nodes: %v", err)
+	if err != nil || len(nodes.Items) == 0 {
+		nodes, err = client.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{
+			LabelSelector: "node-role.kubernetes.io/master",
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to list master nodes: %v", err)
+		}
 	}
 
 	if len(nodes.Items) == 0 {
