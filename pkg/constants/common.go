@@ -33,9 +33,7 @@ const (
 
 // New constants
 const (
-	// Her kontrol döngüsü arasındaki bekleme süresi
 	CertificateCheckInterval = 1 * time.Hour
 
-	// Yenileme işlemi için maksimum bekleme süresi
 	RenewalProcessTimeout = 30 * time.Minute
 )

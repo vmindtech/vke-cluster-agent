@@ -7,11 +7,15 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/vmindtech/vke-cluster-agent/config"
+	"github.com/vmindtech/vke-cluster-agent/internal/model"
 	"github.com/vmindtech/vke-cluster-agent/pkg/constants"
+	"gopkg.in/yaml.v2"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -98,77 +102,102 @@ func (a *appService) CheckVKEClusterCertificateExpiration(isExpired chan bool) {
 
 func (a *appService) RenewMasterNodesCertificates() error {
 	clID := config.GlobalConfig.GetVKEConfig().ClusterID
-
-	klog.V(2).InfoS("Starting master certificate renewal process",
-		"cluster_id", clID,
-		"component", "certificate_renewer")
-
-	nodes, err := a.k8sClient.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{
-		LabelSelector: constants.MasterNodeLabelSelector,
-	})
+	cluster, err := a.iVKEClusterService.GetCluster(clID, a.getLatestToken(), config.GlobalConfig.GetVKEConfig().VKEURL)
 	if err != nil {
-		klog.ErrorS(err, "Failed to list master nodes",
-			"cluster_id", clID,
-			"component", "certificate_renewer")
-		return fmt.Errorf("failed to list master nodes: %v", err)
+		return fmt.Errorf("failed to get cluster: %v", err)
 	}
 
-	if len(nodes.Items) > 0 {
-		firstMaster := nodes.Items[0]
-		klog.V(0).InfoS("Starting certificate renewal process on first master node",
-			"cluster_id", clID,
-			"node", firstMaster.Name,
-			"component", "certificate_renewer")
+	if cluster.Data.ClusterStatus != constants.ClusterStatusActive {
+		return fmt.Errorf("cluster is not active")
+	}
 
-		cmd := exec.Command("systemctl", "restart", "rke2-server")
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
+	currentNode, err := getCurrentNode(a.k8sClient)
+	if err != nil {
+		return fmt.Errorf("failed to get current node: %v", err)
+	}
 
-		if err := cmd.Run(); err != nil {
-			klog.ErrorS(err, "Failed to restart RKE2 server",
-				"cluster_id", clID,
-				"node", firstMaster.Name,
-				"stderr", stderr.String(),
-				"component", "certificate_renewer")
-			return fmt.Errorf("failed to restart RKE2 server: %v, stderr: %s", err, stderr.String())
+	nodeName := currentNode.Name
+	isFirstMaster := strings.HasSuffix(nodeName, "master-1")
+	isOtherMaster := strings.HasSuffix(nodeName, "master-2") || strings.HasSuffix(nodeName, "master-3")
+	isWorker := !isFirstMaster && !isOtherMaster
+
+	if isWorker {
+		klog.V(2).InfoS("Current node is a worker, waiting before restart",
+			"node", nodeName)
+		time.Sleep(2 * time.Minute)
+		return restartService("rke2-agent")
+	}
+
+	if isFirstMaster {
+		klog.V(0).InfoS("Processing first master node",
+			"node", nodeName)
+
+		if err := restartService("rke2-server"); err != nil {
+			return err
 		}
-
-		time.Sleep(constants.RKE2RestartWaitDuration)
 
 		kubeconfigData, err := os.ReadFile("/etc/rancher/rke2/rke2.yaml")
 		if err != nil {
 			return fmt.Errorf("failed to read kubeconfig: %v", err)
 		}
 
-		kubeconfigBase64 := base64.StdEncoding.EncodeToString(kubeconfigData)
+		var kubeconfigModel model.KubeConfig
+		if err = yaml.Unmarshal(kubeconfigData, &kubeconfigModel); err != nil {
+			return fmt.Errorf("failed to unmarshal kubeconfig: %v", err)
+		}
 
-		vkeURL := config.GlobalConfig.GetVKEConfig().VKEURL
-		token := a.getLatestToken()
+		kubeconfigModel.Clusters[0].Cluster.Server = fmt.Sprintf("https://%s:6443", cluster.Data.ClusterEndpoint)
+		kubeconfigModel.Clusters[0].Name = cluster.Data.ClusterName
+		kubeconfigModel.Contexts[0].Context.Cluster = cluster.Data.ClusterName
+		kubeconfigModel.Contexts[0].Context.User = cluster.Data.ClusterName
+		kubeconfigModel.Contexts[0].Name = cluster.Data.ClusterName
+		kubeconfigModel.CurrentContext = cluster.Data.ClusterName
+		kubeconfigModel.Users[0].Name = cluster.Data.ClusterName
 
-		err = a.iVKEClusterService.UpdateKubeconfig(clID, token, vkeURL, kubeconfigBase64)
+		updatedKubeconfigData, err := yaml.Marshal(kubeconfigModel)
 		if err != nil {
-			return fmt.Errorf("failed to update kubeconfig in VKE API: %v", err)
+			return fmt.Errorf("failed to marshal kubeconfig: %v", err)
 		}
 
-		klog.Info("Successfully updated kubeconfig in VKE API")
-
-		for i := 1; i < len(nodes.Items); i++ {
-			node := nodes.Items[i]
-			klog.InfoS("Starting certificate renewal process on subsequent master node", "node", node.Name)
-
-			cmd := exec.Command("systemctl", "restart", "rke2-server")
-			var stderr bytes.Buffer
-			cmd.Stderr = &stderr
-
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("failed to restart RKE2 server on node %s: %v, stderr: %s",
-					node.Name, err, stderr.String())
-			}
-
-			time.Sleep(constants.RKE2RestartWaitDuration)
+		kubeconfigBase64 := base64.StdEncoding.EncodeToString(updatedKubeconfigData)
+		if err := a.iVKEClusterService.UpdateKubeconfig(
+			clID,
+			a.getLatestToken(),
+			config.GlobalConfig.GetVKEConfig().VKEURL,
+			kubeconfigBase64,
+		); err != nil {
+			return fmt.Errorf("failed to update kubeconfig: %v", err)
 		}
+
+		return nil
 	}
 
+	if isOtherMaster {
+		klog.V(2).InfoS("Processing other master node, waiting before restart",
+			"node", nodeName)
+		time.Sleep(2 * time.Minute)
+		return restartService("rke2-server")
+	}
+
+	return nil
+}
+
+func getCurrentNode(client *kubernetes.Clientset) (*v1.Node, error) {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get hostname: %v", err)
+	}
+	return client.CoreV1().Nodes().Get(context.Background(), hostname, metav1.GetOptions{})
+}
+
+func restartService(serviceName string) error {
+	cmd := exec.Command("systemctl", "restart", serviceName)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to restart %s: %v, stderr: %s", serviceName, err, stderr.String())
+	}
 	return nil
 }
 

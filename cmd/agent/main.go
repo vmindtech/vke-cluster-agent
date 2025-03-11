@@ -70,7 +70,6 @@ func main() {
 			klog.V(2).Info("Renewal process timed out, restarting check cycle")
 		}
 
-		// Kısa bir bekleme süresi ekleyerek sürekli kontrol yapmayı önleyelim
 		time.Sleep(constants.CertificateCheckInterval)
 	}
 }
