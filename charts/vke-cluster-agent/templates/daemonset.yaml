@@ -43,15 +43,36 @@ spec:
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
-          {{- with .Values.volumeMounts }}
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
           volumeMounts:
-          {{- toYaml . | nindent 10 }}
+          - mountPath: /var/run/dbus/system_bus_socket
+            name: dbus-socket
+          - mountPath: /run/systemd/system
+            name: host-systemd
+          {{- if or (hasKey .Values.nodeSelector "node-role.kubernetes.io/master") (hasKey .Values.nodeSelector "node-role.kubernetes.io/control-plane") }}
+          - mountPath: /etc/rancher/rke2/rke2.yaml
+            name: rke2-kubeconfig
+            readOnly: true
           {{- end }}
           args:
             - "-v={{ .Values.agent.verbosityLevel }}"
-      {{- with .Values.volumes }}
       volumes:
-      {{- toYaml . | nindent 6 }}
+      - name: dbus-socket
+        hostPath:
+          path: /var/run/dbus/system_bus_socket
+          type: Socket
+      - name: host-systemd
+        hostPath:
+          path: /run/systemd/system
+          type: Directory
+      {{- if or (hasKey .Values.nodeSelector "node-role.kubernetes.io/master") (hasKey .Values.nodeSelector "node-role.kubernetes.io/control-plane") }}
+      - name: rke2-kubeconfig
+        hostPath:
+          path: /etc/rancher/rke2/rke2.yaml
+          type: File
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

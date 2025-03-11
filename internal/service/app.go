@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
@@ -116,21 +115,21 @@ func (a *appService) RenewMasterNodesCertificates() error {
 		return fmt.Errorf("failed to get current node: %v", err)
 	}
 
-	nodeName := currentNode.Name
-	isFirstMaster := strings.HasSuffix(nodeName, "master-1")
-	isOtherMaster := strings.HasSuffix(nodeName, "master-2") || strings.HasSuffix(nodeName, "master-3")
-	isWorker := !isFirstMaster && !isOtherMaster
-
-	if isWorker {
-		klog.V(2).InfoS("Current node is a worker, waiting before restart",
-			"node", nodeName)
-		time.Sleep(2 * time.Minute)
-		return restartService("rke2-agent")
+	if !isMasterNode(currentNode) {
+		return nil
 	}
+
+	firstMaster, err := getFirstMasterNode(a.k8sClient)
+	if err != nil {
+		return fmt.Errorf("failed to determine first master node: %v", err)
+	}
+
+	isFirstMaster := currentNode.Name == firstMaster.Name
+	isOtherMaster := !isFirstMaster && isMasterNode(currentNode)
 
 	if isFirstMaster {
 		klog.V(0).InfoS("Processing first master node",
-			"node", nodeName)
+			"node", currentNode.Name)
 
 		if err := restartService("rke2-server"); err != nil {
 			return err
@@ -174,7 +173,7 @@ func (a *appService) RenewMasterNodesCertificates() error {
 
 	if isOtherMaster {
 		klog.V(2).InfoS("Processing other master node, waiting before restart",
-			"node", nodeName)
+			"node", currentNode.Name)
 		time.Sleep(2 * time.Minute)
 		return restartService("rke2-server")
 	}
@@ -182,12 +181,39 @@ func (a *appService) RenewMasterNodesCertificates() error {
 	return nil
 }
 
-func getCurrentNode(client *kubernetes.Clientset) (*v1.Node, error) {
-	hostname, err := os.Hostname()
+func isMasterNode(node *v1.Node) bool {
+	_, isMaster := node.Labels["node-role.kubernetes.io/master"]
+	_, isControlPlane := node.Labels["node-role.kubernetes.io/control-plane"]
+	return isMaster || isControlPlane
+}
+
+func getFirstMasterNode(client *kubernetes.Clientset) (*v1.Node, error) {
+	nodes, err := client.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{
+		LabelSelector: "node-role.kubernetes.io/master=,node-role.kubernetes.io/control-plane=",
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get hostname: %v", err)
+		return nil, fmt.Errorf("failed to list master nodes: %v", err)
 	}
-	return client.CoreV1().Nodes().Get(context.Background(), hostname, metav1.GetOptions{})
+
+	if len(nodes.Items) == 0 {
+		return nil, fmt.Errorf("no master nodes found")
+	}
+
+	firstMaster := nodes.Items[0]
+	for _, node := range nodes.Items {
+		if node.CreationTimestamp.Before(&firstMaster.CreationTimestamp) {
+			firstMaster = node
+		}
+	}
+	return &firstMaster, nil
+}
+
+func getCurrentNode(client *kubernetes.Clientset) (*v1.Node, error) {
+	nodeName := os.Getenv("NODE_NAME")
+	if nodeName == "" {
+		return nil, fmt.Errorf("NODE_NAME environment variable is not set")
+	}
+	return client.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 }
 
 func restartService(serviceName string) error {
@@ -208,39 +234,32 @@ func (a *appService) RestartWorkerNodes() error {
 		"cluster_id", clID,
 		"component", "worker_restarter")
 
-	nodes, err := a.k8sClient.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{
-		LabelSelector: constants.WorkerNodeLabelSelector,
-	})
+	currentNode, err := getCurrentNode(a.k8sClient)
 	if err != nil {
-		klog.ErrorS(err, "Failed to list worker nodes",
-			"cluster_id", clID,
-			"component", "worker_restarter")
-		return fmt.Errorf("failed to list worker nodes: %v", err)
+		return fmt.Errorf("failed to get current node: %v", err)
 	}
 
-	for _, node := range nodes.Items {
-		klog.V(0).InfoS("Restarting RKE2 agent on worker node",
+	if isMasterNode(currentNode) {
+		klog.V(2).InfoS("Skipping restart on master node",
 			"cluster_id", clID,
-			"node", node.Name,
-			"node_uid", node.UID,
+			"node", currentNode.Name,
 			"component", "worker_restarter")
+		return nil
+	}
 
-		cmd := exec.Command("systemctl", "restart", "rke2-agent")
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
+	klog.V(0).InfoS("Restarting RKE2 agent on worker node",
+		"cluster_id", clID,
+		"node", currentNode.Name,
+		"node_uid", currentNode.UID,
+		"component", "worker_restarter")
 
-		if err := cmd.Run(); err != nil {
-			klog.ErrorS(err, "Failed to restart RKE2 agent",
-				"cluster_id", clID,
-				"node", node.Name,
-				"node_uid", node.UID,
-				"stderr", stderr.String(),
-				"component", "worker_restarter")
-			return fmt.Errorf("failed to restart RKE2 agent on node %s: %v, stderr: %s",
-				node.Name, err, stderr.String())
-		}
-
-		time.Sleep(constants.RKE2RestartWaitDuration)
+	if err := restartService("rke2-agent"); err != nil {
+		klog.ErrorS(err, "Failed to restart RKE2 agent",
+			"cluster_id", clID,
+			"node", currentNode.Name,
+			"node_uid", currentNode.UID,
+			"component", "worker_restarter")
+		return fmt.Errorf("failed to restart RKE2 agent on node %s: %v", currentNode.Name, err)
 	}
 
 	return nil
