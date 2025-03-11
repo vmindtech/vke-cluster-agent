@@ -10,6 +10,10 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o vke-cluster-agent ./cmd/ag
 
 FROM ubuntu:22.04 AS build-release-stage
 
+RUN apt-get update && apt-get install -y \
+    systemd \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /
 
 COPY --from=build-stage /app/vke-cluster-agent /vke-cluster-agent
