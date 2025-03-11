@@ -60,3 +60,12 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{- define "vke-cluster-agent.isMaster" -}}
+{{- $labels := (lookup "v1" "Node" "" .nodeName).metadata.labels -}}
+{{- if or (hasKey $labels "node-role.kubernetes.io/master") (hasKey $labels "node-role.kubernetes.io/control-plane") -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end -}}
