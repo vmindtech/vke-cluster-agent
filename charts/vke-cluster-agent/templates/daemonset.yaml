@@ -21,6 +21,10 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      hostNetwork: true
+      hostPID: true
+      hostIPC: true
+      priorityClassName: system-cluster-critical
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -30,26 +34,24 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+            privileged: true
           env:
             {{- range $key, $value := .Values.environments }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          resources:
-            {{- toYaml .Values.resources | nindent 12 }}
           {{- with .Values.volumeMounts }}
           volumeMounts:
-            {{- toYaml . | nindent 10 }}
+{{ toYaml . | indent 12 }}
           {{- end }}
           args:
             - "-v={{ .Values.agent.verbosityLevel }}"
       {{- with .Values.volumes }}
       volumes:
-        {{- toYaml . | nindent 6 }}
+{{ toYaml . | indent 8 }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
