@@ -79,10 +79,8 @@ volumes:
 volumeMounts: 
   - name: dbus-socket
     mountPath: /var/run/dbus/system_bus_socket
-    subPath: system_bus_socket
   - name: host-systemd
     mountPath: /run/systemd/system
-    subPath: systemd
 
 nodeSelector: {}
 
