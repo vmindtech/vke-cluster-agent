@@ -74,13 +74,19 @@ volumes:
     hostPath:
       path: /run/systemd/system
       type: Directory
-
+  - name: rke2-kubeconfig
+    hostPath:
+      path: /etc/rancher/rke2/rke2.yaml
+      type: File
 
 volumeMounts: 
   - name: dbus-socket
     mountPath: /var/run/dbus/system_bus_socket
   - name: host-systemd
     mountPath: /run/systemd/system
+  - name: rke2-kubeconfig
+    mountPath: /etc/rancher/rke2/rke2.yaml
+    readOnly: true
 
 nodeSelector: {}
 
