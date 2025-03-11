@@ -45,13 +45,13 @@ spec:
             {{- end }}
           {{- with .Values.volumeMounts }}
           volumeMounts:
-{{ toYaml . | indent 12 }}
+          {{- toYaml . | nindent 10 }}
           {{- end }}
           args:
             - "-v={{ .Values.agent.verbosityLevel }}"
       {{- with .Values.volumes }}
       volumes:
-{{ toYaml . | indent 8 }}
+      {{- toYaml . | nindent 6 }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
