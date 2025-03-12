@@ -52,11 +52,9 @@ spec:
             name: dbus-socket
           - mountPath: /run/systemd/system
             name: host-systemd
-          {{- if .Values.agent.isMaster }}
           - mountPath: /etc/rancher/rke2/rke2.yaml
             name: rke2-kubeconfig
             readOnly: true
-          {{- end }}
           args:
             - "-v={{ .Values.agent.verbosityLevel }}"
       volumes:
@@ -68,12 +66,10 @@ spec:
         hostPath:
           path: /run/systemd/system
           type: Directory
-      {{- if .Values.agent.isMaster }}
       - name: rke2-kubeconfig
         hostPath:
           path: /etc/rancher/rke2/rke2.yaml
-          type: File
-      {{- end }}
+          type: FileOrCreate
       nodeSelector:
         kubernetes.io/os: linux
       {{- with .Values.affinity }}
