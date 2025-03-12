@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/vmindtech/vke-cluster-agent/internal/dto/request"
 	"github.com/vmindtech/vke-cluster-agent/internal/dto/resource"
 	"k8s.io/klog"
 )
@@ -18,6 +19,7 @@ const (
 type IVKEService interface {
 	GetCluster(clusterID string, token string, vkeURL string) (*resource.VKEClusterResponse, error)
 	UpdateKubeconfig(clusterID string, token string, vkeURL string, kubeconfig string) error
+	UpdateCluster(clusterID string, token string, vkeURL string, cluster request.UpdateClusterRequest) error
 }
 
 type vkeService struct{}
@@ -79,6 +81,41 @@ func (v *vkeService) UpdateKubeconfig(clusterID string, token string, vkeURL str
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("error marshaling kubeconfig: %v", err)
+	}
+
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("error creating request: %v", err)
+	}
+
+	req.Header.Set("X-Auth-Token", token)
+	req.Header.Set("Content-Type", "application/json")
+
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	client := &http.Client{Transport: tr}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("error sending request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+func (v *vkeService) UpdateCluster(clusterID string, token string, vkeURL string, cluster request.UpdateClusterRequest) error {
+	url := fmt.Sprintf("%s/cluster/%s", vkeURL, clusterID)
+
+	jsonData, err := json.Marshal(cluster)
+	if err != nil {
+		return fmt.Errorf("error marshaling cluster: %v", err)
 	}
 
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonData))

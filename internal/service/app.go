@@ -11,6 +11,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/vmindtech/vke-cluster-agent/config"
+	"github.com/vmindtech/vke-cluster-agent/internal/dto/request"
 	"github.com/vmindtech/vke-cluster-agent/internal/model"
 	"github.com/vmindtech/vke-cluster-agent/pkg/constants"
 	"gopkg.in/yaml.v2"
@@ -100,6 +101,15 @@ func (a *appService) CheckVKEClusterCertificateExpiration(isExpired chan bool) {
 }
 
 func (a *appService) RenewMasterNodesCertificates() error {
+	var getCurrentTime func() time.Time
+	if config.GlobalConfig.GetIsTestMode() {
+		getCurrentTime = func() time.Time {
+			return time.Now().AddDate(0, 0, 359)
+		}
+	} else {
+		getCurrentTime = time.Now
+	}
+
 	clID := config.GlobalConfig.GetVKEConfig().ClusterID
 	cluster, err := a.iVKEClusterService.GetCluster(clID, a.getLatestToken(), config.GlobalConfig.GetVKEConfig().VKEURL)
 	if err != nil {
@@ -166,6 +176,21 @@ func (a *appService) RenewMasterNodesCertificates() error {
 			kubeconfigBase64,
 		); err != nil {
 			return fmt.Errorf("failed to update kubeconfig: %v", err)
+		}
+
+		clReq := request.UpdateClusterRequest{
+			ClusterCertificateExpireDate: getCurrentTime().AddDate(0, 0, 359),
+			ClusterName:                  cluster.Data.ClusterName,
+			ClusterVersion:               cluster.Data.ClusterVersion,
+			ClusterStatus:                cluster.Data.ClusterStatus,
+			ClusterAPIAccess:             cluster.Data.ClusterAPIAccess,
+		}
+		if err := a.iVKEClusterService.UpdateCluster(
+			clID,
+			a.getLatestToken(),
+			config.GlobalConfig.GetVKEConfig().VKEURL,
+			clReq); err != nil {
+			return fmt.Errorf("failed to update cluster: %v", err)
 		}
 
 		return nil
