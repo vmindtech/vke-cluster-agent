@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 	"time"
@@ -44,29 +45,45 @@ func main() {
 	}
 
 	appService := di.InitAppService(k8sClient, k8sConfig)
+	var lastHandledExpireDate time.Time
 
 	for {
-		isExpired := make(chan bool)
-		go appService.CheckVKEClusterCertificateExpiration(isExpired)
+		expireDates := make(chan time.Time, 1)
+		checkerCtx, cancelChecker := context.WithCancel(context.Background())
+		go appService.CheckVKEClusterCertificateExpiration(checkerCtx, expireDates)
 
 		select {
-		case expired := <-isExpired:
-			if expired {
-				klog.V(0).Info("Certificate expiration detected, starting renewal process")
+		case expireDate := <-expireDates:
+			cancelChecker()
 
-				if err := appService.RenewMasterNodesCertificates(); err != nil {
-					klog.Errorf("Failed to renew master certificates: %v", err)
-					continue
-				}
-
-				if err := appService.RestartWorkerNodes(); err != nil {
-					klog.Errorf("Failed to restart worker nodes: %v", err)
-					continue
-				}
-
-				klog.V(0).Info("Certificate renewal process completed successfully")
+			if expireDate.Equal(lastHandledExpireDate) {
+				klog.V(2).InfoS("Skipping duplicate certificate renewal request",
+					"cluster_id", clID,
+					"expire_date", expireDate)
+				time.Sleep(constants.CertificateCheckInterval)
+				continue
 			}
+
+			klog.V(0).InfoS("Certificate expiration detected, starting renewal process",
+				"cluster_id", clID,
+				"expire_date", expireDate)
+
+			if err := appService.RenewMasterNodesCertificates(); err != nil {
+				klog.Errorf("Failed to renew master certificates: %v", err)
+				time.Sleep(constants.CertificateCheckInterval)
+				continue
+			}
+
+			if err := appService.RestartWorkerNodes(); err != nil {
+				klog.Errorf("Failed to restart worker nodes: %v", err)
+				time.Sleep(constants.CertificateCheckInterval)
+				continue
+			}
+
+			lastHandledExpireDate = expireDate
+			klog.V(0).Info("Certificate renewal process completed successfully")
 		case <-time.After(constants.RenewalProcessTimeout):
+			cancelChecker()
 			klog.V(2).Info("Renewal process timed out, restarting check cycle")
 		}
 

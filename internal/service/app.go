@@ -3,15 +3,19 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/vmindtech/vke-cluster-agent/config"
 	"github.com/vmindtech/vke-cluster-agent/internal/dto/request"
+	"github.com/vmindtech/vke-cluster-agent/internal/dto/resource"
 	"github.com/vmindtech/vke-cluster-agent/internal/model"
 	"github.com/vmindtech/vke-cluster-agent/pkg/constants"
 	"gopkg.in/yaml.v2"
@@ -24,7 +28,7 @@ import (
 
 type IAppService interface {
 	GetOpenstackSession(pjID, applicationCredentialID, applicationCredentialSecret, identityURL string) (*gophercloud.ProviderClient, error)
-	CheckVKEClusterCertificateExpiration(isExpired chan bool)
+	CheckVKEClusterCertificateExpiration(ctx context.Context, expireDates chan<- time.Time)
 	RenewMasterNodesCertificates() error
 	RestartWorkerNodes() error
 }
@@ -34,6 +38,13 @@ type appService struct {
 	iVKEClusterService IVKEService
 	k8sClient          *kubernetes.Clientset
 	k8sConfig          *rest.Config
+}
+
+const rke2KubeconfigPath = "/etc/rancher/rke2/rke2.yaml"
+
+type serviceState struct {
+	ActiveState string
+	ExecMainPID string
 }
 
 func NewAppService(iOpenstackService IOpenstackService, iVKEClusterService IVKEService, k8sClient *kubernetes.Clientset, k8sConfig *rest.Config) IAppService {
@@ -49,7 +60,7 @@ func (a *appService) GetOpenstackSession(pjID, applicationCredentialID, applicat
 	return a.iOpenstackService.ValidateAndCreateSession(pjID, applicationCredentialID, applicationCredentialSecret, identityURL)
 }
 
-func (a *appService) CheckVKEClusterCertificateExpiration(isExpired chan bool) {
+func (a *appService) CheckVKEClusterCertificateExpiration(ctx context.Context, expireDates chan<- time.Time) {
 	clID := config.GlobalConfig.GetVKEConfig().ClusterID
 	vkeURL := config.GlobalConfig.GetVKEConfig().VKEURL
 
@@ -63,6 +74,12 @@ func (a *appService) CheckVKEClusterCertificateExpiration(isExpired chan bool) {
 	}
 
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		token := a.getLatestToken()
 		if token == "" {
 			klog.ErrorS(nil, "Failed to get token",
@@ -88,30 +105,47 @@ func (a *appService) CheckVKEClusterCertificateExpiration(isExpired chan bool) {
 			"cluster_id", clID,
 			"component", "certificate_checker")
 
-		if IsExpired(getCurrentTime(), getClusterResponse.Data.ClusterCertificateExpireDate, constants.OneWeekMaintenanceWindow) {
+		expireDate := getClusterResponse.Data.ClusterCertificateExpireDate
+		if IsExpired(getCurrentTime(), expireDate, constants.OneWeekMaintenanceWindow) {
 			klog.V(0).InfoS("Certificate expiration detected",
 				"cluster_id", clID,
-				"expire_date", getClusterResponse.Data.ClusterCertificateExpireDate,
+				"expire_date", expireDate,
 				"component", "certificate_checker")
-			isExpired <- true
+			select {
+			case expireDates <- expireDate:
+			case <-ctx.Done():
+				return
+			default:
+				klog.V(2).InfoS("Certificate expiration already queued",
+					"cluster_id", clID,
+					"expire_date", expireDate,
+					"component", "certificate_checker")
+			}
 		}
 
-		time.Sleep(constants.VKECheckCertificateExpirationInterval)
+		timer := time.NewTimer(constants.VKECheckCertificateExpirationInterval)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			return
+		case <-timer.C:
+		}
 	}
 }
 
 func (a *appService) RenewMasterNodesCertificates() error {
-	var getCurrentTime func() time.Time
-	if config.GlobalConfig.GetIsTestMode() {
-		getCurrentTime = func() time.Time {
-			return time.Now().AddDate(0, 0, 359)
-		}
-	} else {
-		getCurrentTime = time.Now
+	clID := config.GlobalConfig.GetVKEConfig().ClusterID
+	token := a.getLatestToken()
+	if token == "" {
+		return fmt.Errorf("failed to get token")
 	}
 
-	clID := config.GlobalConfig.GetVKEConfig().ClusterID
-	cluster, err := a.iVKEClusterService.GetCluster(clID, a.getLatestToken(), config.GlobalConfig.GetVKEConfig().VKEURL)
+	cluster, err := a.iVKEClusterService.GetCluster(clID, token, config.GlobalConfig.GetVKEConfig().VKEURL)
 	if err != nil {
 		return fmt.Errorf("failed to get cluster: %v", err)
 	}
@@ -134,34 +168,37 @@ func (a *appService) RenewMasterNodesCertificates() error {
 		return fmt.Errorf("failed to determine first master node: %v", err)
 	}
 
-	isFirstMaster := currentNode.Name == firstMaster.Name
-	isOtherMaster := !isFirstMaster && isMasterNode(currentNode)
+	previousExpireDate := cluster.Data.ClusterCertificateExpireDate
 
-	if isFirstMaster {
+	if currentNode.Name == firstMaster.Name {
 		klog.V(0).InfoS("Processing first master node",
-			"node", currentNode.Name)
+			"cluster_id", clID,
+			"node", currentNode.Name,
+			"expire_date", previousExpireDate)
 
 		if err := restartService("rke2-server"); err != nil {
 			return err
 		}
 
-		kubeconfigData, err := os.ReadFile("/etc/rancher/rke2/rke2.yaml")
+		time.Sleep(constants.RKE2RestartWaitDuration)
+
+		kubeconfigData, updatedExpireDate, err := waitForKubeconfigCertificateRotation(
+			rke2KubeconfigPath,
+			previousExpireDate,
+			constants.KubeconfigVerificationTimeout,
+		)
 		if err != nil {
-			return fmt.Errorf("failed to read kubeconfig: %v", err)
+			return err
 		}
 
-		var kubeconfigModel model.KubeConfig
-		if err = yaml.Unmarshal(kubeconfigData, &kubeconfigModel); err != nil {
-			return fmt.Errorf("failed to unmarshal kubeconfig: %v", err)
+		kubeconfigModel, err := parseKubeconfig(kubeconfigData)
+		if err != nil {
+			return err
 		}
 
-		kubeconfigModel.Clusters[0].Cluster.Server = fmt.Sprintf("https://%s:6443", cluster.Data.ClusterEndpoint)
-		kubeconfigModel.Clusters[0].Name = cluster.Data.ClusterName
-		kubeconfigModel.Contexts[0].Context.Cluster = cluster.Data.ClusterName
-		kubeconfigModel.Contexts[0].Context.User = cluster.Data.ClusterName
-		kubeconfigModel.Contexts[0].Name = cluster.Data.ClusterName
-		kubeconfigModel.CurrentContext = cluster.Data.ClusterName
-		kubeconfigModel.Users[0].Name = cluster.Data.ClusterName
+		if err := updateKubeconfigForCluster(&kubeconfigModel, cluster); err != nil {
+			return err
+		}
 
 		updatedKubeconfigData, err := yaml.Marshal(kubeconfigModel)
 		if err != nil {
@@ -169,9 +206,14 @@ func (a *appService) RenewMasterNodesCertificates() error {
 		}
 
 		kubeconfigBase64 := base64.StdEncoding.EncodeToString(updatedKubeconfigData)
+		updateToken := a.getLatestToken()
+		if updateToken == "" {
+			return fmt.Errorf("failed to get token for kubeconfig update")
+		}
+
 		if err := a.iVKEClusterService.UpdateKubeconfig(
 			clID,
-			a.getLatestToken(),
+			updateToken,
 			config.GlobalConfig.GetVKEConfig().VKEURL,
 			kubeconfigBase64,
 		); err != nil {
@@ -179,29 +221,69 @@ func (a *appService) RenewMasterNodesCertificates() error {
 		}
 
 		clReq := request.UpdateClusterRequest{
-			ClusterCertificateExpireDate: getCurrentTime().AddDate(0, 0, 359),
+			ClusterCertificateExpireDate: updatedExpireDate,
 			ClusterName:                  cluster.Data.ClusterName,
 			ClusterVersion:               cluster.Data.ClusterVersion,
 			ClusterStatus:                cluster.Data.ClusterStatus,
 			ClusterAPIAccess:             cluster.Data.ClusterAPIAccess,
 		}
+
+		updateToken = a.getLatestToken()
+		if updateToken == "" {
+			return fmt.Errorf("failed to get token for cluster update")
+		}
+
 		if err := a.iVKEClusterService.UpdateCluster(
 			clID,
-			a.getLatestToken(),
+			updateToken,
 			config.GlobalConfig.GetVKEConfig().VKEURL,
 			clReq); err != nil {
 			return fmt.Errorf("failed to update cluster: %v", err)
 		}
 
+		klog.V(0).InfoS("Validated renewed kubeconfig certificate on first master",
+			"cluster_id", clID,
+			"node", currentNode.Name,
+			"expire_date", updatedExpireDate)
 		return nil
 	}
 
-	if isOtherMaster {
-		klog.V(2).InfoS("Processing other master node, waiting before restart",
-			"node", currentNode.Name)
-		time.Sleep(2 * time.Minute)
-		return restartService("rke2-server")
+	klog.V(0).InfoS("Waiting for first master certificate renewal to complete",
+		"cluster_id", clID,
+		"node", currentNode.Name,
+		"first_master", firstMaster.Name,
+		"expire_date", previousExpireDate)
+
+	updatedCluster, err := a.waitForClusterCertificateUpdate(previousExpireDate, constants.ClusterUpdateVerificationTimeout)
+	if err != nil {
+		return err
 	}
+
+	klog.V(0).InfoS("First master update detected, restarting current master",
+		"cluster_id", clID,
+		"node", currentNode.Name,
+		"first_master", firstMaster.Name,
+		"expire_date", updatedCluster.Data.ClusterCertificateExpireDate)
+
+	if err := restartService("rke2-server"); err != nil {
+		return err
+	}
+
+	time.Sleep(constants.RKE2RestartWaitDuration)
+
+	_, updatedExpireDate, err := waitForKubeconfigCertificateRotation(
+		rke2KubeconfigPath,
+		previousExpireDate,
+		constants.KubeconfigVerificationTimeout,
+	)
+	if err != nil {
+		return err
+	}
+
+	klog.V(0).InfoS("Validated renewed kubeconfig certificate on master node",
+		"cluster_id", clID,
+		"node", currentNode.Name,
+		"expire_date", updatedExpireDate)
 
 	return nil
 }
@@ -247,7 +329,198 @@ func getCurrentNode(client *kubernetes.Clientset) (*v1.Node, error) {
 	return client.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 }
 
+func (a *appService) waitForClusterCertificateUpdate(previousExpireDate time.Time, timeout time.Duration) (*resource.VKEClusterResponse, error) {
+	clID := config.GlobalConfig.GetVKEConfig().ClusterID
+	vkeURL := config.GlobalConfig.GetVKEConfig().VKEURL
+	deadline := time.Now().Add(timeout)
+
+	var lastErr error
+	for time.Now().Before(deadline) {
+		token := a.getLatestToken()
+		if token == "" {
+			lastErr = fmt.Errorf("failed to get token while waiting for first master update")
+			time.Sleep(constants.ServiceVerificationInterval)
+			continue
+		}
+
+		cluster, err := a.iVKEClusterService.GetCluster(clID, token, vkeURL)
+		if err == nil && cluster.Data.ClusterCertificateExpireDate.After(previousExpireDate) {
+			return cluster, nil
+		}
+		if err != nil {
+			lastErr = err
+		} else {
+			lastErr = fmt.Errorf(
+				"cluster certificate expiry did not advance beyond %s",
+				previousExpireDate.UTC().Format(time.RFC3339),
+			)
+		}
+
+		time.Sleep(constants.ServiceVerificationInterval)
+	}
+
+	if lastErr == nil {
+		lastErr = fmt.Errorf("cluster certificate expiry did not advance beyond %s", previousExpireDate.UTC().Format(time.RFC3339))
+	}
+
+	return nil, fmt.Errorf("timed out waiting for first master certificate update: %w", lastErr)
+}
+
+func parseKubeconfig(kubeconfigData []byte) (model.KubeConfig, error) {
+	var kubeconfigModel model.KubeConfig
+	if err := yaml.Unmarshal(kubeconfigData, &kubeconfigModel); err != nil {
+		return model.KubeConfig{}, fmt.Errorf("failed to unmarshal kubeconfig: %v", err)
+	}
+
+	return kubeconfigModel, nil
+}
+
+func updateKubeconfigForCluster(kubeconfigModel *model.KubeConfig, cluster *resource.VKEClusterResponse) error {
+	if len(kubeconfigModel.Clusters) == 0 || len(kubeconfigModel.Contexts) == 0 || len(kubeconfigModel.Users) == 0 {
+		return fmt.Errorf("kubeconfig is missing required clusters, contexts, or users")
+	}
+
+	kubeconfigModel.Clusters[0].Cluster.Server = fmt.Sprintf("https://%s:6443", cluster.Data.ClusterEndpoint)
+	kubeconfigModel.Clusters[0].Name = cluster.Data.ClusterName
+	kubeconfigModel.Contexts[0].Context.Cluster = cluster.Data.ClusterName
+	kubeconfigModel.Contexts[0].Context.User = cluster.Data.ClusterName
+	kubeconfigModel.Contexts[0].Name = cluster.Data.ClusterName
+	kubeconfigModel.CurrentContext = cluster.Data.ClusterName
+	kubeconfigModel.Users[0].Name = cluster.Data.ClusterName
+
+	return nil
+}
+
+func getKubeconfigCertificateExpiration(kubeconfigModel model.KubeConfig) (time.Time, error) {
+	if len(kubeconfigModel.Users) == 0 {
+		return time.Time{}, fmt.Errorf("kubeconfig does not contain any users")
+	}
+
+	clientCertificateData := kubeconfigModel.Users[0].User.ClientCertificateData
+	if clientCertificateData == "" {
+		return time.Time{}, fmt.Errorf("kubeconfig does not contain client certificate data")
+	}
+
+	certificateBytes, err := base64.StdEncoding.DecodeString(clientCertificateData)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to decode kubeconfig client certificate: %v", err)
+	}
+
+	certificateBlock, _ := pem.Decode(certificateBytes)
+	if certificateBlock == nil {
+		return time.Time{}, fmt.Errorf("failed to decode PEM block from kubeconfig client certificate")
+	}
+
+	certificate, err := x509.ParseCertificate(certificateBlock.Bytes)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse kubeconfig client certificate: %v", err)
+	}
+
+	return certificate.NotAfter, nil
+}
+
+func readKubeconfigCertificateExpiration(path string) ([]byte, time.Time, error) {
+	kubeconfigData, err := os.ReadFile(path)
+	if err != nil {
+		return nil, time.Time{}, fmt.Errorf("failed to read kubeconfig: %v", err)
+	}
+
+	kubeconfigModel, err := parseKubeconfig(kubeconfigData)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+
+	expireDate, err := getKubeconfigCertificateExpiration(kubeconfigModel)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+
+	return kubeconfigData, expireDate, nil
+}
+
+func waitForKubeconfigCertificateRotation(path string, previousExpireDate time.Time, timeout time.Duration) ([]byte, time.Time, error) {
+	deadline := time.Now().Add(timeout)
+
+	var lastErr error
+	for time.Now().Before(deadline) {
+		kubeconfigData, expireDate, err := readKubeconfigCertificateExpiration(path)
+		if err == nil && expireDate.After(previousExpireDate) {
+			return kubeconfigData, expireDate, nil
+		}
+		if err != nil {
+			lastErr = err
+		} else {
+			lastErr = fmt.Errorf(
+				"kubeconfig certificate expiry did not advance beyond %s",
+				previousExpireDate.UTC().Format(time.RFC3339),
+			)
+		}
+
+		time.Sleep(constants.ServiceVerificationInterval)
+	}
+
+	if lastErr == nil {
+		lastErr = fmt.Errorf("kubeconfig certificate expiry did not advance beyond %s", previousExpireDate.UTC().Format(time.RFC3339))
+	}
+
+	return nil, time.Time{}, fmt.Errorf("timed out waiting for kubeconfig certificate refresh: %w", lastErr)
+}
+
+func getServiceState(serviceName string) (serviceState, error) {
+	activeStateOutput, err := exec.Command("systemctl", "is-active", serviceName).CombinedOutput()
+	activeState := strings.TrimSpace(string(activeStateOutput))
+	if err != nil && activeState == "" {
+		return serviceState{}, fmt.Errorf("failed to get active state for %s: %v", serviceName, err)
+	}
+
+	pidOutput, err := exec.Command("systemctl", "show", serviceName, "--property=ExecMainPID", "--value").Output()
+	if err != nil {
+		return serviceState{}, fmt.Errorf("failed to get main pid for %s: %v", serviceName, err)
+	}
+
+	return serviceState{
+		ActiveState: activeState,
+		ExecMainPID: strings.TrimSpace(string(pidOutput)),
+	}, nil
+}
+
+func waitForServiceRestart(serviceName string, previousState serviceState, timeout time.Duration) (serviceState, error) {
+	deadline := time.Now().Add(timeout)
+
+	var lastErr error
+	for time.Now().Before(deadline) {
+		currentState, err := getServiceState(serviceName)
+		if err == nil && currentState.ActiveState == "active" && currentState.ExecMainPID != "" && currentState.ExecMainPID != "0" && currentState.ExecMainPID != previousState.ExecMainPID {
+			return currentState, nil
+		}
+		if err != nil {
+			lastErr = err
+		} else {
+			lastErr = fmt.Errorf(
+				"service %s state=%s pid=%s previous_pid=%s",
+				serviceName,
+				currentState.ActiveState,
+				currentState.ExecMainPID,
+				previousState.ExecMainPID,
+			)
+		}
+
+		time.Sleep(constants.ServiceVerificationInterval)
+	}
+
+	if lastErr == nil {
+		lastErr = fmt.Errorf("service %s did not report a new active main pid", serviceName)
+	}
+
+	return serviceState{}, fmt.Errorf("timed out verifying restart for %s: %w", serviceName, lastErr)
+}
+
 func restartService(serviceName string) error {
+	previousState, err := getServiceState(serviceName)
+	if err != nil {
+		return err
+	}
+
 	cmd := exec.Command("systemctl", "restart", serviceName)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -255,6 +528,17 @@ func restartService(serviceName string) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to restart %s: %v, stderr: %s", serviceName, err, stderr.String())
 	}
+
+	currentState, err := waitForServiceRestart(serviceName, previousState, constants.ServiceVerificationTimeout)
+	if err != nil {
+		return err
+	}
+
+	klog.V(0).InfoS("Verified systemd service restart",
+		"service", serviceName,
+		"previous_pid", previousState.ExecMainPID,
+		"current_pid", currentState.ExecMainPID)
+
 	return nil
 }
 

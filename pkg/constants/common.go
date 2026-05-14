@@ -22,7 +22,11 @@ const (
 
 // RKE2 Related Constants
 const (
-	RKE2RestartWaitDuration = 30 * time.Second
+	RKE2RestartWaitDuration          = 600 * time.Second
+	ServiceVerificationInterval      = 5 * time.Second
+	ServiceVerificationTimeout       = 2 * time.Minute
+	KubeconfigVerificationTimeout    = 2 * time.Minute
+	ClusterUpdateVerificationTimeout = 10 * time.Minute
 )
 
 // Node Label Selectors
