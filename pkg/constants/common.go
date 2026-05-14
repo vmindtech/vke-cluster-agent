@@ -22,9 +22,9 @@ const (
 
 // RKE2 Related Constants
 const (
-	RKE2RestartWaitDuration          = 600 * time.Second
+	RKE2RestartWaitDuration          = 10 * time.Minute
 	ServiceVerificationInterval      = 5 * time.Second
-	ServiceVerificationTimeout       = 2 * time.Minute
+	ServiceVerificationTimeout       = 10 * time.Minute
 	KubeconfigVerificationTimeout    = 2 * time.Minute
 	ClusterUpdateVerificationTimeout = 10 * time.Minute
 )
