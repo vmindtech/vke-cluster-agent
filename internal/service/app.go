@@ -466,14 +466,21 @@ func waitForKubeconfigCertificateRotation(path string, previousExpireDate time.T
 	return nil, time.Time{}, fmt.Errorf("timed out waiting for kubeconfig certificate refresh: %w", lastErr)
 }
 
+// runHostSystemctl runs systemctl on the host via chroot into HostRootPath.
+// Container-local systemctl cannot manage host units (reports "Running in chroot").
+func runHostSystemctl(args ...string) *exec.Cmd {
+	cmdArgs := append([]string{constants.HostRootPath, "systemctl"}, args...)
+	return exec.Command("chroot", cmdArgs...)
+}
+
 func getServiceState(serviceName string) (serviceState, error) {
-	activeStateOutput, err := exec.Command("systemctl", "is-active", serviceName).CombinedOutput()
+	activeStateOutput, err := runHostSystemctl("is-active", serviceName).CombinedOutput()
 	activeState := strings.TrimSpace(string(activeStateOutput))
 	if err != nil && activeState == "" {
 		return serviceState{}, fmt.Errorf("failed to get active state for %s: %v", serviceName, err)
 	}
 
-	pidOutput, err := exec.Command("systemctl", "show", serviceName, "--property=ExecMainPID", "--value").Output()
+	pidOutput, err := runHostSystemctl("show", serviceName, "--property=ExecMainPID", "--value").Output()
 	if err != nil {
 		return serviceState{}, fmt.Errorf("failed to get main pid for %s: %v", serviceName, err)
 	}
@@ -521,7 +528,7 @@ func restartService(serviceName string) error {
 		return err
 	}
 
-	cmd := exec.Command("systemctl", "restart", serviceName)
+	cmd := runHostSystemctl("restart", serviceName)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 

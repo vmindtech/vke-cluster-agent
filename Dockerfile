@@ -10,8 +10,9 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o vke-cluster-agent ./cmd/ag
 
 FROM ubuntu:22.04 AS build-release-stage
 
-RUN apt-get update && apt-get install -y \
-    systemd \
+# chroot is used to run host systemctl; do not install container systemd.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /

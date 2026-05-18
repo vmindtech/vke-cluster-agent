@@ -20,6 +20,9 @@ const (
 	VKECheckCertificateExpirationInterval = 1 * time.Hour
 )
 
+// Host filesystem path for chroot-based systemctl (must match DaemonSet volumeMount).
+const HostRootPath = "/host"
+
 // RKE2 Related Constants
 const (
 	RKE2RestartWaitDuration          = 10 * time.Minute
