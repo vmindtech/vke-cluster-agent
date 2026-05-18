@@ -466,22 +466,15 @@ func waitForKubeconfigCertificateRotation(path string, previousExpireDate time.T
 	return nil, time.Time{}, fmt.Errorf("timed out waiting for kubeconfig certificate refresh: %w", lastErr)
 }
 
-// runHostSystemctl runs systemctl on the host. With hostPID, nsenter into init namespaces
-// is preferred; chroot is used only when nsenter is unavailable.
+// runHostSystemctl runs systemctl on the host via nsenter (requires hostPID on the pod).
 func runHostSystemctl(args ...string) *exec.Cmd {
-	if _, err := exec.LookPath("nsenter"); err == nil {
-		cmdArgs := append([]string{
-			"-t", constants.HostInitPID,
-			"-m", "-p", "-i", "-n", "-u",
-			"--",
-			"systemctl",
-		}, args...)
-		return exec.Command("nsenter", cmdArgs...)
-	}
-
-	systemctlPath := constants.HostSystemctlPath
-	cmdArgs := append([]string{constants.HostRootPath, systemctlPath}, args...)
-	return exec.Command("chroot", cmdArgs...)
+	cmdArgs := append([]string{
+		"-t", constants.HostInitPID,
+		"-m", "-p", "-i", "-n", "-u",
+		"--",
+		"systemctl",
+	}, args...)
+	return exec.Command("nsenter", cmdArgs...)
 }
 
 func runHostSystemctlOutput(args ...string) ([]byte, error) {

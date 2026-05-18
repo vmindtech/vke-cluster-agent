@@ -48,8 +48,6 @@ spec:
                 fieldRef:
                   fieldPath: spec.nodeName
           volumeMounts:
-          - mountPath: /host
-            name: host-root
           - mountPath: /var/run/dbus/system_bus_socket
             name: dbus-socket
           - mountPath: /run/systemd/system
@@ -60,10 +58,6 @@ spec:
           args:
             - "-v={{ .Values.agent.verbosityLevel }}"
       volumes:
-      - name: host-root
-        hostPath:
-          path: /
-          type: Directory
       - name: dbus-socket
         hostPath:
           path: /var/run/dbus/system_bus_socket
