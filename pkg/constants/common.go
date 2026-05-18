@@ -20,8 +20,14 @@ const (
 	VKECheckCertificateExpirationInterval = 1 * time.Hour
 )
 
-// Host filesystem path for chroot-based systemctl (must match DaemonSet volumeMount).
+// Host filesystem path (DaemonSet volumeMount). Used as fallback for systemctl.
 const HostRootPath = "/host"
+
+// HostInitPID is the host init/systemd PID visible when the pod runs with hostPID.
+const HostInitPID = "1"
+
+// HostSystemctlPath is the systemctl path on typical RKE2 nodes.
+const HostSystemctlPath = "/usr/bin/systemctl"
 
 // RKE2 Related Constants
 const (

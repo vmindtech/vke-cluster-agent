@@ -466,21 +466,52 @@ func waitForKubeconfigCertificateRotation(path string, previousExpireDate time.T
 	return nil, time.Time{}, fmt.Errorf("timed out waiting for kubeconfig certificate refresh: %w", lastErr)
 }
 
-// runHostSystemctl runs systemctl on the host via chroot into HostRootPath.
-// Container-local systemctl cannot manage host units (reports "Running in chroot").
+// runHostSystemctl runs systemctl on the host. With hostPID, nsenter into init namespaces
+// is preferred; chroot is used only when nsenter is unavailable.
 func runHostSystemctl(args ...string) *exec.Cmd {
-	cmdArgs := append([]string{constants.HostRootPath, "systemctl"}, args...)
+	if _, err := exec.LookPath("nsenter"); err == nil {
+		cmdArgs := append([]string{
+			"-t", constants.HostInitPID,
+			"-m", "-p", "-i", "-n", "-u",
+			"--",
+			"systemctl",
+		}, args...)
+		return exec.Command("nsenter", cmdArgs...)
+	}
+
+	systemctlPath := constants.HostSystemctlPath
+	cmdArgs := append([]string{constants.HostRootPath, systemctlPath}, args...)
 	return exec.Command("chroot", cmdArgs...)
 }
 
+func runHostSystemctlOutput(args ...string) ([]byte, error) {
+	cmd := runHostSystemctl(args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	output, err := cmd.Output()
+	if err != nil {
+		errMsg := strings.TrimSpace(stderr.String())
+		if errMsg == "" {
+			errMsg = strings.TrimSpace(string(output))
+		}
+		if errMsg != "" {
+			return output, fmt.Errorf("%w: %s", err, errMsg)
+		}
+		return output, err
+	}
+
+	return output, nil
+}
+
 func getServiceState(serviceName string) (serviceState, error) {
-	activeStateOutput, err := runHostSystemctl("is-active", serviceName).CombinedOutput()
+	activeStateOutput, err := runHostSystemctlOutput("is-active", serviceName)
 	activeState := strings.TrimSpace(string(activeStateOutput))
 	if err != nil && activeState == "" {
 		return serviceState{}, fmt.Errorf("failed to get active state for %s: %v", serviceName, err)
 	}
 
-	pidOutput, err := runHostSystemctl("show", serviceName, "--property=ExecMainPID", "--value").Output()
+	pidOutput, err := runHostSystemctlOutput("show", serviceName, "--property=ExecMainPID", "--value")
 	if err != nil {
 		return serviceState{}, fmt.Errorf("failed to get main pid for %s: %v", serviceName, err)
 	}

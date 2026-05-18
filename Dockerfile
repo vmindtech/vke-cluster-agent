@@ -10,9 +10,10 @@ RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o vke-cluster-agent ./cmd/ag
 
 FROM ubuntu:22.04 AS build-release-stage
 
-# chroot is used to run host systemctl; do not install container systemd.
+# nsenter runs host systemctl when the pod uses hostPID; do not install container systemd.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    util-linux \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /
