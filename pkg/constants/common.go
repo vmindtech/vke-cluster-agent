@@ -20,9 +20,16 @@ const (
 	VKECheckCertificateExpirationInterval = 1 * time.Hour
 )
 
+// HostInitPID is the host init/systemd PID visible when the pod runs with hostPID.
+const HostInitPID = "1"
+
 // RKE2 Related Constants
 const (
-	RKE2RestartWaitDuration = 30 * time.Second
+	RKE2RestartWaitDuration          = 10 * time.Minute
+	ServiceVerificationInterval      = 5 * time.Second
+	ServiceVerificationTimeout       = 10 * time.Minute
+	KubeconfigVerificationTimeout    = 2 * time.Minute
+	ClusterUpdateVerificationTimeout = 10 * time.Minute
 )
 
 // Node Label Selectors
